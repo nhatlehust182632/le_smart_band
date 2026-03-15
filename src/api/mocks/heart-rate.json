@@ -1,0 +1,9 @@
+{
+  "status": true,
+  "data": {
+    "hr_avg": 78,
+    "hr_max": 122,
+    "hr_min": 61,
+    "measure_time": "2026-03-15T10:00:00Z"
+  }
+}

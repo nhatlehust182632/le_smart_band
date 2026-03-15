@@ -1,0 +1,10 @@
+{
+  "status": true,
+  "data": {
+    "total_sleep_minutes": 420,
+    "deep_sleep_minutes": 120,
+    "light_sleep_minutes": 250,
+    "awake_minutes": 50,
+    "measure_time": "2026-03-15T07:00:00Z"
+  }
+}
