@@ -1,19 +1,23 @@
+import { SensorData } from "@/api/models/health.model";
 import { callApi } from "../api/core/apiClient";
 import {
-    mapHeartRateResponse,
-    mapStepsResponse,
+  mapHeartRateResponse,
+  mapStepsResponse,
 } from "../api/mappers/health.mapper";
 
 export const healthApiSource = {
   async getHeartRate(
     deviceId: string,
     token: string,
-    from?: string,
-    to?: string,
+    sensorData: SensorData,
+    // from?: string,
+    // to?: string,
   ) {
     const rawData = await callApi("getHeartRate", {
-      pathParams: { deviceId },
-      query: { from, to },
+      // pathParams: { deviceId },
+      body: { ...sensorData },
+      // query: { from, to },
+      query: sensorData,
       token,
     });
 

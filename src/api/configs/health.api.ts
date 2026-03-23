@@ -5,8 +5,8 @@ export const healthApis: Record<string, ApiConfig> = {
   getHeartRate: {
     name: "getHeartRate",
     baseUrl: ENV.HEALTH_API_BASE_URL,
-    endpoint: "/v1/heartrate/{deviceId}",
-    method: "GET",
+    endpoint: "/api/sensors",
+    method: "POST",
     timeout: ENV.DEFAULT_TIMEOUT,
     retries: 2,
     authType: "bearer",

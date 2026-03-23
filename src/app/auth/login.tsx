@@ -1,32 +1,63 @@
+import LoadingScreen from "@/components/LoadingScreen";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-    Alert,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 
 export default function LoginScreen() {
   const { login } = useAuth();
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [phone, setPhone] = useState("378147307");
+  const [password, setPassword] = useState("123456");
 
   const handleLogin = async () => {
+    // const sensorData: SensorData = {
+    //   id: 3,
+    //   heart_rate: 80,
+    //   spo2: 98,
+    //   steps: 1200,
+    //   created_at: "2026-03-17T10:30:00Z",
+    // };
+    // try {
+    //   const data = await healthService.getHeartRate(
+    //     "BAND001",
+    //     "USER_ACCESS_TOKEN",
+    //     sensorData,
+    //   );
+    //   console.log("Heart rate:", data);
+    // } catch (error) {
+    //   logger.error("Main app error", error);
+    // }
+    /////////////////////
+    if (loading) return; //  🔥 CHẶN SPAM TẠI ĐÂY
     try {
-      await login(email, password);
-      router.replace("../tabs");
+      setLoading(true);
+      await login(phone, password);
+      router.replace("/tabs");
     } catch (error: any) {
       Alert.alert("Đăng nhập thất bại", error.message || "Có lỗi xảy ra");
+    } finally {
+      setLoading(false);
     }
   };
+
+  // useEffect(() => {
+  //   handleLogin();
+  // }, []);
+
+  if (loading) {
+    return <LoadingScreen message="Đang tải danh sách giám sát..." />;
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -43,11 +74,11 @@ export default function LoginScreen() {
 
         <TextInput
           style={styles.input}
-          placeholder="Email"
+          placeholder="Điện thoại"
           placeholderTextColor="#90A4AE"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
+          value={phone}
+          onChangeText={setPhone}
+          keyboardType="phone-pad"
           autoCapitalize="none"
         />
 

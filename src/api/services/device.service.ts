@@ -14,4 +14,11 @@ export const deviceService = {
       token,
     });
   },
+
+  getInfoDevices(idUser: string) {
+    return callApi("getInfoDevices", {
+      pathParams: { idUser },
+      query: { id: idUser },
+    });
+  },
 };

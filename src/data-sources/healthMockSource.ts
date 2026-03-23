@@ -1,6 +1,6 @@
 import {
-    mapHeartRateResponse,
-    mapSleepResponse,
+  mapHeartRateResponse,
+  mapSleepResponse,
 } from "../api/mappers/health.mapper";
 
 import heartRateMockJson from "../api/mocks/heart-rate.json";

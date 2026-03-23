@@ -1,12 +1,18 @@
+import { useAuth } from "@/context/AuthContext";
+import { heartRateHook } from "@/hooks/heartRate";
+import { userDevice } from "@/hooks/userDevice";
 import {
   FontAwesome5,
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Location from "expo-location";
 import { router } from "expo-router";
-import React from "react";
+import { Pedometer } from "expo-sensors";
+import React, { useEffect, useState } from "react";
 import {
+  Alert,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -15,11 +21,193 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import MapView, { Marker } from "react-native-maps";
 import { styles } from "../../styles/appStyles";
 
+type Device = {
+  model_name: string;
+  id?: number;
+};
+type Curren = {
+  latitude: number;
+  longitude: number;
+  updatedAt: string;
+};
+type HeartRate = {
+  model_name: string;
+  max_bpm: string;
+  min_bpm: string;
+  avg_bpm: string;
+  latest_bpm: string;
+};
 export default function HomeScreen() {
-  const heartRate = 152;
-  const isAbnormal = heartRate > 120;
+  // const heartRate = 110;
+  const [heartRate, setHeartRate] = useState<HeartRate | null>();
+  // const isAbnormal = heartRate.model_name > 120 || 80 > heartRate?.model_name; // đánh giá nhịp tim, sau sẽ phải viết bằng hàm
+  const isAbnormal = true;
+  const { getInfoDevice } = userDevice();
+  const { getInfoHeartRateByUser } = heartRateHook();
+  const [loading, setLoading] = useState(false);
+  const [device, setDevice] = useState<Device | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<Curren | null>();
+  const [locationAddress, setLocationAddress] = useState<string>("");
+  const [stepCount, setStepCount] = useState<number>(0);
+  const [isPedometerAvailable, setIsPedometerAvailable] = useState<
+    boolean | null
+  >(null);
+
+  // hàm lấy vị trí từ điện thoại
+  const handleGetCurrentLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status !== "granted") {
+        Alert.alert("Thông báo", "Bạn chưa cấp quyền truy cập vị trí");
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const { latitude, longitude } = location.coords;
+
+      setCurrentLocation({
+        latitude,
+        longitude,
+        updatedAt: new Date().toLocaleString(),
+      });
+
+      const address = await Location.reverseGeocodeAsync({
+        latitude,
+        longitude,
+      });
+
+      if (address && address.length > 0) {
+        const first = address[0];
+        const fullAddress = [
+          first.name,
+          first.street,
+          first.district,
+          first.city,
+          first.region,
+          first.country,
+        ]
+          .filter(Boolean)
+          .join(", ");
+
+        setLocationAddress(fullAddress);
+      }
+    } catch (error) {
+      console.log("Lỗi lấy vị trí:", error);
+      Alert.alert("Lỗi", "Không lấy được vị trí hiện tại");
+    }
+  };
+
+  const { user } = useAuth();
+  // hàm lấy số bước chân hôm nay
+  const handleGetTodaySteps = async () => {
+    try {
+      const isAvailable = await Pedometer.isAvailableAsync();
+      setIsPedometerAvailable(isAvailable);
+
+      if (!isAvailable) {
+        Alert.alert("Thông báo", "Thiết bị không hỗ trợ đếm bước chân");
+        return;
+      }
+
+      // Xin quyền nếu cần
+      const permission = await Pedometer.requestPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          "Thông báo",
+          "Bạn chưa cấp quyền truy cập dữ liệu bước chân",
+        );
+        return;
+      }
+
+      const end = new Date();
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+
+      const result = await Pedometer.getStepCountAsync(start, end);
+      setStepCount(result.steps || 0);
+    } catch (error) {
+      console.log("Lỗi lấy số bước:", error);
+      Alert.alert("Lỗi", "Không lấy được số bước chân hôm nay");
+    }
+  };
+  // lấy thông tin thiết bị
+  const handleGetDevice = async () => {
+    if (loading) return;
+    try {
+      setLoading(true);
+      const data = await getInfoDevice(user?.id || "");
+      console.log("device: " + data);
+      setDevice(data);
+    } catch (error: any) {
+      Alert.alert("Đăng nhập thất bại", error.message || "Có lỗi xảy ra");
+    } finally {
+      setLoading(false);
+    }
+  };
+  // Cập nhật realtime khi người dùng đang đi
+  useEffect(() => {
+    let subscription: { remove: () => void } | null = null;
+
+    const subscribeSteps = async () => {
+      const isAvailable = await Pedometer.isAvailableAsync();
+      if (!isAvailable) return;
+
+      const permission = await Pedometer.requestPermissionsAsync();
+      if (!permission.granted) return;
+
+      subscription = Pedometer.watchStepCount((result) => {
+        setStepCount((prev) => {
+          const next = result.steps;
+          return next > prev ? next : prev;
+        });
+      });
+    };
+
+    subscribeSteps();
+
+    return () => {
+      subscription?.remove();
+    };
+  }, []);
+  // lấy thông tin nhịp tim mới nhất
+  const handleGetHeartRate = async () => {
+    if (loading) return;
+    try {
+      setLoading(true);
+      const data = await getInfoHeartRateByUser(user?.id || "");
+      setHeartRate(data);
+    } catch (error) {
+      console.log("Lỗi lấy nhịp tim:", error);
+    }
+  };
+
+  useEffect(() => {
+    handleGetDevice();
+    handleGetCurrentLocation();
+    handleGetTodaySteps();
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // gọi lần đầu
+    handleGetHeartRate();
+
+    // lặp mỗi 0.5 phút
+    const interval = setInterval(() => {
+      handleGetHeartRate();
+    }, 30000); // 30000ms = 0.5 phút
+
+    // cleanup khi unmount
+    return () => clearInterval(interval);
+  }, [user?.id]);
 
   return (
     <SafeAreaView style={localStyles.safeBlue}>
@@ -33,7 +221,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
 
               <View>
-                <Text style={styles.greeting}>Xin chào, Nam</Text>
+                <Text style={styles.greeting}>Xin chào, {user?.name}</Text>
                 <Text style={styles.subGreeting}>
                   Theo dõi sức khỏe mỗi ngày
                 </Text>
@@ -65,8 +253,8 @@ export default function HomeScreen() {
               </View>
 
               <View style={{ flex: 1 }}>
-                <Text style={styles.deviceName}>VSK Smart Band A1</Text>
-                <Text style={styles.deviceStatus}>Đã kết nối</Text>
+                <Text style={styles.deviceName}>{device?.model_name}</Text>
+                {/* <Text style={styles.deviceStatus}>Đã kết nối</Text> */}
               </View>
 
               <TouchableOpacity style={styles.primaryBtn}>
@@ -82,7 +270,9 @@ export default function HomeScreen() {
             <View style={styles.heartTop}>
               <View>
                 <Text style={styles.heartLabel}>Nhịp tim hiện tại</Text>
-                <Text style={styles.heartValue}>{heartRate} BPM</Text>
+                <Text style={styles.heartValue}>
+                  {heartRate?.latest_bpm} BPM
+                </Text>
               </View>
 
               <View style={styles.heartIconWrap}>
@@ -125,8 +315,8 @@ export default function HomeScreen() {
             <Text style={styles.sectionTitle}>Chức năng chính</Text>
           </View>
 
-          <View style={styles.quickGrid}>
-            <TouchableOpacity style={styles.quickCard}>
+          <View style={localStyles.quickGrid}>
+            <TouchableOpacity style={localStyles.quickCard}>
               <View style={[styles.quickIcon, { backgroundColor: "#E3F2FD" }]}>
                 <MaterialCommunityIcons
                   name="bluetooth-connect"
@@ -139,7 +329,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.quickCard}
+              style={localStyles.quickCard}
               onPress={() => router.push("../heart-rate")}
             >
               <View style={[styles.quickIcon, { backgroundColor: "#FCE4EC" }]}>
@@ -150,7 +340,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.quickCard}
+              style={localStyles.quickCard}
               onPress={() => router.push("../location")}
             >
               <View style={[styles.quickIcon, { backgroundColor: "#E8F5E9" }]}>
@@ -159,26 +349,81 @@ export default function HomeScreen() {
               <Text style={styles.quickTitle}>Định vị</Text>
               <Text style={styles.quickDesc}>Xem vị trí cuối cùng</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={localStyles.quickCard}
+              onPress={() => router.push("../monitor")}
+            >
+              <View style={[styles.quickIcon, { backgroundColor: "#FFF3E0" }]}>
+                <MaterialCommunityIcons
+                  name="account-eye"
+                  size={24}
+                  color="#EF6C00"
+                />
+              </View>
+              <Text style={styles.quickTitle}>Giám sát</Text>
+              <Text style={styles.quickDesc}>Theo dõi người thân</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.card}>
             <View style={styles.cardTitleRow}>
               <Ionicons name="location" size={22} color="#2E7D32" />
-              <Text style={styles.cardTitle}>Vị trí cuối cùng</Text>
+              <Text style={styles.cardTitle}>Vị trí hiện tại</Text>
             </View>
 
-            <View style={styles.mapPlaceholder}>
-              <Ionicons name="map" size={42} color="#90A4AE" />
-              <Text style={styles.mapText}>Công viên Thống Nhất</Text>
-              <Text style={styles.mapSubText}>Cập nhật 5 phút trước</Text>
+            {currentLocation ? (
+              <>
+                <View
+                  style={{
+                    height: 220,
+                    borderRadius: 16,
+                    overflow: "hidden",
+                    marginTop: 12,
+                  }}
+                >
+                  <MapView
+                    style={{ flex: 1 }}
+                    region={{
+                      latitude: currentLocation.latitude,
+                      longitude: currentLocation.longitude,
+                      latitudeDelta: 0.01,
+                      longitudeDelta: 0.01,
+                    }}
+                  >
+                    <Marker
+                      coordinate={{
+                        latitude: currentLocation.latitude,
+                        longitude: currentLocation.longitude,
+                      }}
+                      title="Vị trí hiện tại"
+                      description={locationAddress || "Đang cập nhật địa chỉ"}
+                    />
+                  </MapView>
+                </View>
 
-              <TouchableOpacity
-                style={styles.mapActionBtn}
-                onPress={() => router.push("../location")}
-              >
-                <Text style={styles.mapActionBtnText}>Mở màn hình định vị</Text>
-              </TouchableOpacity>
-            </View>
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.mapText}>
+                    {locationAddress || "Đang lấy địa chỉ..."}
+                  </Text>
+                  <Text style={styles.mapSubText}>
+                    Cập nhật lúc: {currentLocation.updatedAt}
+                  </Text>
+
+                  <TouchableOpacity
+                    style={styles.mapActionBtn}
+                    onPress={handleGetCurrentLocation}
+                  >
+                    <Text style={styles.mapActionBtnText}>Lấy lại vị trí</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <View style={styles.mapPlaceholder}>
+                <Ionicons name="locate" size={42} color="#90A4AE" />
+                <Text style={styles.mapText}>Đang lấy vị trí hiện tại...</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.card}>
@@ -189,20 +434,29 @@ export default function HomeScreen() {
 
             <View style={styles.summaryRow}>
               <View style={styles.summaryBox}>
-                <Text style={styles.summaryNumber}>8,245</Text>
+                <Text style={styles.summaryNumber}>
+                  {stepCount.toLocaleString("vi-VN")}
+                </Text>
                 <Text style={styles.summaryLabel}>Bước chân</Text>
               </View>
 
               <View style={styles.summaryBox}>
-                <Text style={styles.summaryNumber}>72</Text>
+                <Text style={styles.summaryNumber}>{heartRate?.avg_bpm}</Text>
                 <Text style={styles.summaryLabel}>Nhịp tim TB</Text>
               </View>
 
               <View style={styles.summaryBox}>
-                <Text style={styles.summaryNumber}>7h20</Text>
-                <Text style={styles.summaryLabel}>Giấc ngủ</Text>
+                <Text style={styles.summaryNumber}>0</Text>
+                <Text style={styles.summaryLabel}>Cảnh báo hôm nay</Text>
               </View>
             </View>
+            {/* <TouchableOpacity
+              onPress={handleGetTodaySteps}
+              // style={{ marginBottom: 10, marginTop: -10 }}
+              style={styles.mapActionBtn}
+            >
+              <Text style={styles.mapActionBtnText}>Cập nhật hôm nay</Text>
+            </TouchableOpacity> */}
           </View>
 
           <View style={{ height: 24 }} />
@@ -216,5 +470,19 @@ const localStyles = StyleSheet.create({
   safeBlue: {
     flex: 1,
     backgroundColor: "#0D47A1",
+  },
+  quickGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+
+  quickCard: {
+    width: "48%",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    alignItems: "center",
   },
 });

@@ -1,8 +1,10 @@
+import { Profile } from "@/api/models/user.model";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
+  Alert,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -12,14 +14,36 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useAuth } from "../../context/AuthContext";
-import { styles } from "../../styles/appStyles";
+import { useAuth } from "../../../context/AuthContext";
+import { useProfile } from "../../../hooks/useProfile";
+import { styles } from "../../../styles/appStyles";
 
 export default function ProfileScreen() {
-  const [notifyFamily, setNotifyFamily] = React.useState(true);
-  const [heartAlert, setHeartAlert] = React.useState(true);
-  const [gpsTracking, setGpsTracking] = React.useState(true);
-  const { logout } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<Profile | null>(null);
+  const [notifyFamily, setNotifyFamily] = useState(true);
+  const [heartAlert, setHeartAlert] = useState(true);
+  const [gpsTracking, setGpsTracking] = useState(true);
+  const { logout, user } = useAuth();
+  const { getInfoProfile } = useProfile();
+
+  const handleGetProfile = async () => {
+    if (loading) return;
+    try {
+      setLoading(true);
+      const data = await getInfoProfile(user?.id || "");
+      setData(data);
+      console.log("Profile: ", data);
+    } catch (error: any) {
+      Alert.alert("Đăng nhập thất bại", error.message || "Có lỗi xảy ra");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    handleGetProfile();
+  }, []);
 
   return (
     <SafeAreaView style={localStyles.safePurple}>
@@ -39,20 +63,35 @@ export default function ProfileScreen() {
             <View style={styles.avatarWrap}>
               <Ionicons name="person" size={42} color="#6A1B9A" />
             </View>
-            <Text style={styles.profileName}>Nguyễn Văn Nam</Text>
+            <Text style={styles.profileName}>{data?.full_name ?? ""}</Text>
             <Text style={styles.profileRole}>Người đeo vòng sức khỏe</Text>
 
             <View style={styles.profileTagRow}>
               <View style={styles.profileTag}>
-                <Text style={styles.profileTagText}>Tuổi: 67</Text>
+                <Text style={styles.profileTagText}>
+                  Tuổi: {data?.age ?? "?"}
+                </Text>
               </View>
               <View style={styles.profileTag}>
-                <Text style={styles.profileTagText}>Nam</Text>
+                <Text style={styles.profileTagText}>
+                  {data?.gender == "male"
+                    ? "Nam"
+                    : data?.gender == "female"
+                      ? "Nữ"
+                      : "Khác"}
+                </Text>
               </View>
               <View style={styles.profileTag}>
                 <Text style={styles.profileTagText}>Nhóm nguy cơ</Text>
               </View>
             </View>
+            <TouchableOpacity
+              style={localStyles.editButton}
+              onPress={() => router.push("/tabs/profile/edit")}
+            >
+              <Ionicons name="create-outline" size={18} color="#fff" />
+              <Text style={localStyles.editButtonText}>Cập nhật thông tin</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.card}>
@@ -67,22 +106,31 @@ export default function ProfileScreen() {
 
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Họ và tên</Text>
-              <Text style={styles.infoValue}>Nguyễn Văn Nam</Text>
+              <Text style={styles.infoValue}>{data?.full_name ?? ""}</Text>
             </View>
 
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Số điện thoại</Text>
-              <Text style={styles.infoValue}>0901 234 567</Text>
+              <Text style={styles.infoValue}>{data?.phone ?? ""}</Text>
             </View>
 
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Người liên hệ khẩn cấp</Text>
-              <Text style={styles.infoValue}>Nguyễn Thị Lan</Text>
+              <Text style={styles.infoValue}>
+                {data?.emergency_contact_name ?? ""}
+              </Text>
+            </View>
+
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>SĐT liên hệ khẩn cấp</Text>
+              <Text style={styles.infoValue}>
+                {data?.emergency_contact_phone ?? ""}
+              </Text>
             </View>
 
             <View style={styles.infoItemNoBorder}>
               <Text style={styles.infoLabel}>Thiết bị đang dùng</Text>
-              <Text style={styles.infoValue}>VSK Smart Band A1</Text>
+              <Text style={styles.infoValue}>{data?.model_name ?? ""}</Text>
             </View>
           </View>
 
@@ -139,8 +187,17 @@ export default function ProfileScreen() {
               alignItems: "center",
             }}
             onPress={() => {
-              logout();
-              router.replace("/auth/login");
+              Alert.alert("Đăng xuất", "Bạn có chắc muốn đăng xuất không?", [
+                { text: "Hủy", style: "cancel" },
+                {
+                  text: "Đăng xuất",
+                  style: "destructive",
+                  onPress: () => {
+                    logout();
+                    router.replace("/auth/login");
+                  },
+                },
+              ]);
             }}
           >
             <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>
@@ -159,5 +216,21 @@ const localStyles = StyleSheet.create({
   safePurple: {
     flex: 1,
     backgroundColor: "#4A148C",
+  },
+  editButton: {
+    marginTop: 16,
+    backgroundColor: "#6A1B9A",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    gap: 8,
+  },
+  editButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
   },
 });

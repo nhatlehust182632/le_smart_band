@@ -19,3 +19,11 @@ export interface SleepData {
   awakeMinutes: number;
   measuredAt: string;
 }
+
+export interface SensorData {
+  id: number;
+  heart_rate: number;
+  spo2: number;
+  steps: number;
+  created_at: string;
+}

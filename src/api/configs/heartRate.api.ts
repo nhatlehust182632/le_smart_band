@@ -1,39 +1,11 @@
 import { ENV } from "../../constants/env";
 import { ApiConfig } from "../core/types";
 
-export const deviceApis: Record<string, ApiConfig> = {
-  getDeviceInfo: {
-    name: "getDeviceInfo",
-    baseUrl: ENV.SMART_BAND_API_BASE_URL,
-    endpoint: "/v1/devices/{deviceId}",
-    method: "GET",
-    timeout: ENV.DEFAULT_TIMEOUT,
-    retries: 2,
-    authType: "bearer",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    transformResponse: (data) => data?.data || data,
-  },
-
-  getDeviceBattery: {
-    name: "getDeviceBattery",
-    baseUrl: ENV.SMART_BAND_API_BASE_URL,
-    endpoint: "/v1/devices/{deviceId}/battery",
-    method: "GET",
-    timeout: ENV.DEFAULT_TIMEOUT,
-    retries: 2,
-    authType: "bearer",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    transformResponse: (data) => data?.data || data,
-  },
-
-  getInfoDevices: {
-    name: "getInfoDevices",
+export const heartRateApi: Record<string, ApiConfig> = {
+  getHeartRateByUser: {
+    name: "getHeartRateByUser",
     baseUrl: ENV.USER_API_BASE_URL,
-    endpoint: "/api/device/getDeviceByUser",
+    endpoint: "/api/heartRate/getInfo",
     method: "GET",
     timeout: ENV.DEFAULT_TIMEOUT,
     retries: 2,
@@ -41,6 +13,35 @@ export const deviceApis: Record<string, ApiConfig> = {
     headers: {
       "Content-Type": "application/json",
     },
+    token: "USER_ACCESS_TOKEN",
+    transformResponse: (data) => data?.data || data,
+  },
+  getHeartRateByTimes: {
+    name: "getHeartRateByTimes",
+    baseUrl: ENV.USER_API_BASE_URL,
+    endpoint: "/api/heartRate/ChartTime",
+    method: "GET",
+    timeout: ENV.DEFAULT_TIMEOUT,
+    retries: 2,
+    authType: "bearer",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    token: "USER_ACCESS_TOKEN",
+    transformResponse: (data) => data?.data || data,
+  },
+  getHeartRateHistory: {
+    name: "getHeartRateHistory",
+    baseUrl: ENV.USER_API_BASE_URL,
+    endpoint: "/api/heartRate/history",
+    method: "GET",
+    timeout: ENV.DEFAULT_TIMEOUT,
+    retries: 2,
+    authType: "bearer",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    token: "USER_ACCESS_TOKEN",
     transformResponse: (data) => data?.data || data,
   },
 };

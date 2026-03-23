@@ -1,0 +1,252 @@
+import {
+    FontAwesome5,
+    Ionicons,
+    MaterialCommunityIcons,
+} from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { router, useLocalSearchParams } from "expo-router";
+import React from "react";
+import {
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import { styles } from "../../../styles/appStyles";
+
+const monitorDetails: Record<string, any> = {
+  "001": {
+    name: "Nguyễn Văn Nam",
+    age: 67,
+    relation: "Cha",
+    currentHeartRate: 148,
+    heartStatus: "Cảnh báo",
+    isConnected: true,
+    battery: 78,
+    lastSync: "2 phút trước",
+    lastLocation: "Công viên Thống Nhất, Hà Nội",
+    locationUpdatedAt: "10:32",
+    riskLevel: "Cao",
+  },
+  "002": {
+    name: "Trần Thị Lan",
+    age: 63,
+    relation: "Mẹ",
+    currentHeartRate: 78,
+    heartStatus: "Bình thường",
+    isConnected: true,
+    battery: 90,
+    lastSync: "1 phút trước",
+    lastLocation: "Nhà riêng",
+    locationUpdatedAt: "10:35",
+    riskLevel: "Thấp",
+  },
+  "003": {
+    name: "Phạm Quốc Minh",
+    age: 72,
+    relation: "Bệnh nhân",
+    currentHeartRate: 95,
+    heartStatus: "Theo dõi",
+    isConnected: false,
+    battery: 20,
+    lastSync: "15 phút trước",
+    lastLocation: "Bệnh viện Bạch Mai",
+    locationUpdatedAt: "10:10",
+    riskLevel: "Trung bình",
+  },
+};
+
+export default function MonitorDetailScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const person = monitorDetails[id || "001"];
+
+  if (!person) {
+    return (
+      <SafeAreaView
+        style={{
+          flex: 1,
+          backgroundColor: "#fff",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <Text>Không tìm thấy người được giám sát</Text>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={localStyles.safeOrange}>
+      <StatusBar barStyle="light-content" />
+      <View style={styles.container}>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <LinearGradient colors={["#EF6C00", "#FB8C00"]} style={styles.header}>
+            <View style={localStyles.headerRow}>
+              <TouchableOpacity
+                style={styles.iconBtn}
+                onPress={() => router.back()}
+              >
+                <Ionicons name="arrow-back" size={22} color="#fff" />
+              </TouchableOpacity>
+
+              <View style={{ flex: 1 }}>
+                <Text style={styles.greeting}>Chi tiết giám sát</Text>
+                <Text style={styles.subGreeting}>{person.name}</Text>
+              </View>
+
+              <View style={{ width: 40 }} />
+            </View>
+          </LinearGradient>
+
+          <View style={styles.profileCard}>
+            <View style={styles.avatarWrap}>
+              <Ionicons name="person" size={42} color="#EF6C00" />
+            </View>
+            <Text style={styles.profileName}>{person.name}</Text>
+            <Text style={styles.profileRole}>Người được giám sát</Text>
+
+            <View style={styles.profileTagRow}>
+              <View style={[styles.profileTag, localStyles.orangeTag]}>
+                <Text
+                  style={[styles.profileTagText, localStyles.orangeTagText]}
+                >
+                  Tuổi: {person.age}
+                </Text>
+              </View>
+              <View style={[styles.profileTag, localStyles.orangeTag]}>
+                <Text
+                  style={[styles.profileTagText, localStyles.orangeTagText]}
+                >
+                  Quan hệ: {person.relation}
+                </Text>
+              </View>
+              <View style={[styles.profileTag, localStyles.orangeTag]}>
+                <Text
+                  style={[styles.profileTagText, localStyles.orangeTagText]}
+                >
+                  Mức độ: {person.riskLevel}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.card}>
+            <View style={styles.cardTitleRow}>
+              <MaterialCommunityIcons
+                name="watch-variant"
+                size={22}
+                color="#1565C0"
+              />
+              <Text style={styles.cardTitle}>Thiết bị đang đeo</Text>
+            </View>
+
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Tên thiết bị</Text>
+              <Text style={styles.infoValue}>VSK Smart Band A1</Text>
+            </View>
+
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Trạng thái kết nối</Text>
+              <Text
+                style={[
+                  styles.infoValue,
+                  { color: person.isConnected ? "#2E7D32" : "#D32F2F" },
+                ]}
+              >
+                {person.isConnected ? "Đã kết nối" : "Mất kết nối"}
+              </Text>
+            </View>
+
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Pin thiết bị</Text>
+              <Text style={styles.infoValue}>{person.battery}%</Text>
+            </View>
+
+            <View style={styles.infoItemNoBorder}>
+              <Text style={styles.infoLabel}>Đồng bộ lần cuối</Text>
+              <Text style={styles.infoValue}>{person.lastSync}</Text>
+            </View>
+          </View>
+
+          <LinearGradient
+            colors={["#E53935", "#FF6B6B"]}
+            style={styles.mainHeartCard}
+          >
+            <Text style={styles.mainHeartLabel}>Nhịp tim hiện tại</Text>
+            <View style={styles.mainHeartRow}>
+              <FontAwesome5 name="heartbeat" size={34} color="#fff" />
+              <Text style={styles.mainHeartValue}>
+                {person.currentHeartRate}
+              </Text>
+              <Text style={styles.mainHeartUnit}>BPM</Text>
+            </View>
+            <Text style={styles.mainHeartWarning}>
+              Trạng thái: {person.heartStatus}
+            </Text>
+          </LinearGradient>
+
+          <View style={styles.card}>
+            <View style={styles.cardTitleRow}>
+              <Ionicons name="location" size={22} color="#2E7D32" />
+              <Text style={styles.cardTitle}>Vị trí cuối cùng</Text>
+            </View>
+
+            <View style={styles.infoItem}>
+              <Text style={styles.infoLabel}>Địa điểm</Text>
+              <Text style={styles.infoValue}>{person.lastLocation}</Text>
+            </View>
+
+            <View style={styles.infoItemNoBorder}>
+              <Text style={styles.infoLabel}>Cập nhật lúc</Text>
+              <Text style={styles.infoValue}>{person.locationUpdatedAt}</Text>
+            </View>
+
+            <TouchableOpacity
+              style={localStyles.actionButton}
+              onPress={() => router.push("/tabs/location")}
+            >
+              <Text style={localStyles.actionButtonText}>
+                Mở màn hình định vị
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ height: 24 }} />
+        </ScrollView>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const localStyles = StyleSheet.create({
+  safeOrange: {
+    flex: 1,
+    backgroundColor: "#EF6C00",
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  orangeTag: {
+    backgroundColor: "#FFF3E0",
+  },
+  orangeTagText: {
+    color: "#EF6C00",
+  },
+  actionButton: {
+    marginTop: 16,
+    backgroundColor: "#2E7D32",
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+  actionButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+});

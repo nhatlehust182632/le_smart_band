@@ -2,27 +2,27 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-    Alert,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 
 export default function RegisterScreen() {
   const { register } = useAuth();
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [name, setName] = useState("hungtp");
+  const [phone, setPhone] = useState("0378147307");
+  const [password, setPassword] = useState("123456");
 
   const handleRegister = async () => {
     try {
-      await register(name, email, password);
+      await register(name, phone, password);
       router.replace("../tabs");
     } catch (error: any) {
       Alert.alert("Đăng ký thất bại", error.message || "Có lỗi xảy ra");
@@ -52,11 +52,11 @@ export default function RegisterScreen() {
 
         <TextInput
           style={styles.input}
-          placeholder="Email"
+          placeholder="Số điện thoại"
           placeholderTextColor="#90A4AE"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
+          value={phone}
+          onChangeText={setPhone}
+          keyboardType="phone-pad"
           autoCapitalize="none"
         />
 

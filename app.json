@@ -36,7 +36,14 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Cho phép ứng dụng truy cập vị trí của bạn khi đang sử dụng."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

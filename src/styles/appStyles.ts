@@ -243,9 +243,14 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
+    alignItems: "center",
   },
   mapActionBtnText: {
     color: "#fff",
+    fontWeight: "700",
+  },
+  buocChanBtnText: {
+    color: "#2E7D32",
     fontWeight: "700",
   },
   summaryRow: {
