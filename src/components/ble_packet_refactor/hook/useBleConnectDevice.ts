@@ -20,6 +20,8 @@ import type {
     BlePacketItem,
     BlePacketSummary,
     ReadTarget,
+    Type6MiniGroup,
+    Type6SlidingWindow,
 } from "../types/blePacket.types";
 
 import { decodeBlePacket } from "../utils/decodeBlePacket";
@@ -28,6 +30,12 @@ import {
     buildGroupedPacketSummary,
     logGroupedPacketSummary,
 } from "../utils/summarizeBlePackets";
+
+import {
+    buildType6MiniGroupsFromPackets,
+    createType6SlidingWindow,
+    processType6SlidingWindowDemo,
+} from "../utils/type6SlidingWindows";
 
 import {
     runDemoBlePacketSession,
@@ -52,6 +60,26 @@ export const useBleConnectDevice = () => {
     const bleFirstPacketAtRef = useRef<number | null>(null);
     const bleLastPacketAtRef = useRef<number | null>(null);
     const blePacketIndexRef = useRef(0);
+
+    /**
+     * Hàng đợi chỉ giữ tối đa 2 cụm nhỏ cuối cùng.
+     * Khi có cụm nhỏ mới, ta ghép:
+     * [2 cụm cũ gần nhất] + [cụm mới]
+     * để tạo một cửa sổ 1500 dữ liệu.
+     */
+    const type6MiniGroupQueueRef = useRef<Type6MiniGroup[]>([]);
+    const type6WindowCounterRef = useRef(0);
+
+    /**
+ * Queue các window 1500 dữ liệu type 6 đang chờ đưa vào hàm xử lý.
+ */
+    const type6ProcessingQueueRef = useRef<Type6SlidingWindow[]>([]);
+
+    /**
+     * Đảm bảo mỗi lần chỉ xử lý 1 window.
+     * Window sau phải chờ window trước trả kết quả xong.
+     */
+    const isProcessingType6WindowRef = useRef(false);
 
     const [scanModalVisible, setScanModalVisible] = useState(false);
     const [devices, setDevices] = useState<Device[]>([]);
@@ -111,16 +139,170 @@ export const useBleConnectDevice = () => {
         }
     };
 
+    /**
+ * Xử lý tuần tự các cửa sổ type 6.
+ *
+ * Nghiệp vụ:
+ * - Lấy window đầu queue
+ * - Đưa vào hàm demo/model
+ * - Await kết quả
+ * - Log kết quả
+ * - Xóa window đó khỏi queue
+ * - Tiếp tục window kế tiếp nếu còn
+ *
+ * Trong lúc hàm này chạy:
+ * - BLE vẫn tiếp tục nhận packet mới
+ * - Buffer 30 giây mới vẫn tiếp tục được ghi
+ */
+    const processType6WindowQueueSequentially = async () => {
+        if (isProcessingType6WindowRef.current) {
+            return;
+        }
+
+        isProcessingType6WindowRef.current = true;
+
+        try {
+            while (type6ProcessingQueueRef.current.length > 0) {
+                const currentWindow = type6ProcessingQueueRef.current.shift();
+
+                if (!currentWindow) {
+                    continue;
+                }
+
+                console.log("========== BẮT ĐẦU XỬ LÝ TYPE 6 WINDOW ==========");
+                console.log("WINDOW NO:", currentWindow.windowNo);
+                console.log("PACKET IDS:", currentWindow.packetIds);
+                console.log("MINI GROUP NOS:", currentWindow.miniGroupNos);
+                console.log("TỔNG DỮ LIỆU ĐẦU VÀO:", currentWindow.totalDataCount);
+                console.log("==================================================");
+
+                /**
+                 * Đây chính là chỗ đưa 1500 dữ liệu vào hàm demo/model.
+                 * Sau này bạn thay hàm này bằng model thật.
+                 */
+                const result =
+                    await processType6SlidingWindowDemo(currentWindow);
+
+                console.log("========== KẾT QUẢ TYPE 6 WINDOW ==========");
+                console.log("WINDOW NO:", currentWindow.windowNo);
+                console.log("KẾT QUẢ HÀM DEMO:", result);
+                console.log("============================================");
+
+                /**
+                 * Sau khi xử lý xong:
+                 * - currentWindow không còn nằm trong queue
+                 * - biến local currentWindow sẽ được JS giải phóng khi vòng lặp sang lượt mới
+                 * => dữ liệu cũ coi như đã được bỏ đi.
+                 */
+            }
+        } catch (error) {
+            console.log("PROCESS TYPE 6 WINDOW ERROR:", error);
+        } finally {
+            isProcessingType6WindowRef.current = false;
+        }
+    };
+
+    /**
+     * Đưa các cụm nhỏ type 6 hoàn chỉnh vào hàng đợi trượt.
+     *
+     * Mỗi khi có đủ 3 cụm nhỏ liên tiếp:
+     * - tạo 1 cửa sổ 1500 dữ liệu
+     * - gọi hàm demo processType6SlidingWindowDemo()
+     * - giữ lại 2 cụm nhỏ cuối để ghép với cụm mới tiếp theo
+     */
+    const appendType6MiniGroupsAndProcessWindows = (
+        miniGroups: Type6MiniGroup[]
+    ) => {
+        const completeMiniGroups = miniGroups.filter((miniGroup) => {
+            return miniGroup.isComplete;
+        });
+
+        const incompleteMiniGroups = miniGroups.filter((miniGroup) => {
+            return !miniGroup.isComplete;
+        });
+
+        if (incompleteMiniGroups.length > 0) {
+            console.warn("TYPE 6 MINI GROUP CHƯA ĐỦ DỮ LIỆU:", incompleteMiniGroups);
+        }
+
+        completeMiniGroups.forEach((miniGroup) => {
+            type6MiniGroupQueueRef.current.push(miniGroup);
+
+            if (type6MiniGroupQueueRef.current.length >= 3) {
+                const lastThreeGroups = type6MiniGroupQueueRef.current.slice(-3) as [
+                    Type6MiniGroup,
+                    Type6MiniGroup,
+                    Type6MiniGroup
+                ];
+
+                type6WindowCounterRef.current += 1;
+
+                const slidingWindow = createType6SlidingWindow(
+                    type6WindowCounterRef.current,
+                    lastThreeGroups
+                );
+
+                /**
+                 * Không xử lý ngay tại đây.
+                 * Đưa window vào queue để đảm bảo:
+                 * - xử lý tuần tự
+                 * - window sau đợi window trước xong
+                 * - BLE vẫn nhận dữ liệu mới song song
+                 */
+                type6ProcessingQueueRef.current.push(slidingWindow);
+
+                void processType6WindowQueueSequentially();
+
+                /**
+                 * Chỉ giữ lại 2 cụm gần nhất.
+                 * Ví dụ:
+                 * - Sau A1,A2,A3 -> xử lý A1+A2+A3, giữ A2,A3
+                 * - Có B1 -> xử lý A2+A3+B1, giữ A3,B1
+                 */
+                type6MiniGroupQueueRef.current =
+                    type6MiniGroupQueueRef.current.slice(-2);
+            }
+        });
+    };
+
     const finishBlePacketCollection = async () => {
         const endAt = Date.now();
         const startAt = bleCollectStartAtRef.current ?? endAt;
 
-        const packets = [...blePacketsRef.current];
+        /**
+         * Snapshot dữ liệu của phiên 30 giây vừa kết thúc.
+         * Từ đây trở đi xử lý trên snapshot này,
+         * không động vào buffer nhận packet mới nữa.
+         */
+        const packetsOfFinishedWindow = [...blePacketsRef.current];
         const firstPacketAt = bleFirstPacketAtRef.current;
         const lastPacketAt = bleLastPacketAtRef.current;
 
-        const groupedType5 = buildGroupedPacketSummary(packets, 5);
-        const groupedType6 = buildGroupedPacketSummary(packets, 6);
+        /**
+         * QUAN TRỌNG:
+         * Mở ngay cửa sổ nhận packet 30 giây tiếp theo.
+         *
+         * Nhờ vậy:
+         * - BLE vẫn tiếp tục ghi dữ liệu mới
+         * - xử lý snapshot cũ diễn ra độc lập
+         */
+        startBlePacketCollection();
+
+        /**
+         * Bắt đầu xử lý tập dữ liệu cũ vừa chốt.
+         */
+        const groupedType5 = buildGroupedPacketSummary(
+            packetsOfFinishedWindow,
+            5
+        );
+
+        const groupedType6 = buildGroupedPacketSummary(
+            packetsOfFinishedWindow,
+            6
+        );
+
+        const type6MiniGroups =
+            buildType6MiniGroupsFromPackets(packetsOfFinishedWindow);
 
         const summary: BlePacketSummary = {
             device: {
@@ -128,7 +310,7 @@ export const useBleConnectDevice = () => {
                 name: deviceRef.current?.name ?? connectedDevice?.name ?? null,
             },
 
-            packetCount: packets.length,
+            packetCount: packetsOfFinishedWindow.length,
 
             collectStartedAt: new Date(startAt).toISOString(),
             collectEndedAt: new Date(endAt).toISOString(),
@@ -147,7 +329,7 @@ export const useBleConnectDevice = () => {
                     ? lastPacketAt - firstPacketAt
                     : 0,
 
-            packets,
+            packets: packetsOfFinishedWindow,
 
             groupedPackets: {
                 type5: groupedType5,
@@ -169,7 +351,32 @@ export const useBleConnectDevice = () => {
         logGroupedPacketSummary("GÓI LOẠI 5", groupedType5);
         logGroupedPacketSummary("GÓI LOẠI 6", groupedType6);
 
-        await disconnect();
+        console.log("========== TYPE 6 MINI GROUPS ==========");
+        console.log(type6MiniGroups);
+        console.log("========================================");
+
+        /**
+         * Từ các mini group type 6:
+         * - tạo window 1500 dữ liệu
+         * - đưa vào queue xử lý tuần tự
+         */
+        appendType6MiniGroupsAndProcessWindows(type6MiniGroups);
+
+        /**
+         * Nếu dùng DEMO:
+         * Sau khi mở cửa sổ mới ở đầu hàm,
+         * phát tiếp session demo kế tiếp vào cửa sổ mới đó.
+         */
+        if (USE_DEMO_BLE_DATA) {
+            runSelectedDemoBlePacketSession();
+        }
+
+        /**
+         * Không disconnect.
+         * Không reset lại lần nữa.
+         * Buffer cũ đã được tách snapshot,
+         * buffer mới đang tiếp tục nhận dữ liệu.
+         */
     };
 
     const startBlePacketCollection = () => {
@@ -178,7 +385,7 @@ export const useBleConnectDevice = () => {
         const startAt = Date.now();
         bleCollectStartAtRef.current = startAt;
 
-        console.log("BẮT ĐẦU THU BLE:", new Date(startAt).toISOString());
+        // console.log("BẮT ĐẦU THU BLE:", new Date(startAt).toISOString());
 
         bleCollectionTimeoutRef.current = setTimeout(() => {
             void finishBlePacketCollection();
@@ -193,13 +400,13 @@ export const useBleConnectDevice = () => {
     ) => {
         const data = decodeBlePacket(value);
 
-        console.log("BLE PACKET:", {
-            source,
-            packetType: data.header?.packetType.dec,
-            packetId: data.header?.packetId.dec,
-            packetIndex: data.header?.packetIndex.dec,
-            bufferLength: data.bufferLength,
-        });
+        // console.log("BLE PACKET:", {
+        //     source,
+        //     packetType: data.header?.packetType.dec,
+        //     packetId: data.header?.packetId.dec,
+        //     packetIndex: data.header?.packetIndex.dec,
+        //     bufferLength: data.bufferLength,
+        // });
 
         if (bleCollectStartAtRef.current === null) {
             return;

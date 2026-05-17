@@ -5,11 +5,6 @@ export type ReadTarget = {
     charUUID: string;
 };
 
-export type DeviceDataPayload = {
-    user_device_id: string;
-    bpm: number;
-};
-
 export type ParsedBlePayload = {
     packetName?: "TYPE_5" | "TYPE_6";
     status?: string;
@@ -120,4 +115,55 @@ export type BlePacketSummary = {
         type5: GroupedPacketSummary;
         type6: GroupedPacketSummary;
     };
+};
+
+/**
+ * 1 cụm nhỏ của type 6.
+ *
+ * Theo nghiệp vụ:
+ * - smallGroup 1: index 1 -> 4
+ * - smallGroup 2: index 5 -> 8
+ * - smallGroup 3: index 9 -> 12
+ *
+ * Mỗi cụm nhỏ có:
+ * - 4 packet
+ * - 4 * 125 = 500 dữ liệu
+ */
+export type Type6MiniGroup = {
+    packetId: number;
+    miniGroupNo: 1 | 2 | 3;
+
+    packetIndexes: number[];
+    expectedPacketIndexes: number[];
+    missingPacketIndexes: number[];
+
+    macList: string[];
+
+    packetCount: number;
+    expectedPacketCount: 4;
+
+    values: number[];
+    totalDataCount: number;
+    expectedDataCount: 500;
+
+    isComplete: boolean;
+};
+
+/**
+ * Cửa sổ trượt type 6 gồm 3 cụm nhỏ liên tiếp.
+ *
+ * Tổng dữ liệu:
+ * 500 + 500 + 500 = 1500
+ */
+export type Type6SlidingWindow = {
+    windowNo: number;
+
+    miniGroups: [Type6MiniGroup, Type6MiniGroup, Type6MiniGroup];
+
+    packetIds: number[];
+    miniGroupNos: Array<1 | 2 | 3>;
+
+    values: number[];
+    totalDataCount: number;
+    expectedDataCount: 1500;
 };

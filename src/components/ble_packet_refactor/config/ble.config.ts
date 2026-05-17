@@ -10,7 +10,7 @@
 // - Vẫn scan và connect thiết bị BLE thật.
 // - Sau khi connect xong, nhận dữ liệu thật bằng notify/poll.
 // ======================================================
-export const USE_DEMO_BLE_DATA = true;
+export const USE_DEMO_BLE_DATA = false;
 
 // Thời gian thu packet sau khi connect xong
 export const BLE_COLLECTION_WINDOW_MS = 30_000;
