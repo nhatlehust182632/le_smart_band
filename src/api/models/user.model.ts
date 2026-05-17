@@ -3,6 +3,7 @@ export interface UserLogin {
   id: string;
   full_name: string;
   password_hash: string;
+  device_code?: string;
 }
 
 export interface UserRegister {

@@ -1,18 +1,14 @@
-import {
-  getInfoUserEdit,
-  getUserLogin,
-  postUserRegister,
-} from "@/data-sources/userSource";
+import { userApiSource } from "../../data-sources/ApiSource/userApiSource";
 import { callApi } from "../core/apiClient";
 import { UserLogin, UserRegister } from "../models/user.model";
 
 export const userService = {
   postUserRegister(userRegister: UserRegister) {
-    return postUserRegister(userRegister);
+    return userApiSource.postUserRegister(userRegister);
   },
 
   postUserLogin(UserLogin: UserLogin) {
-    return getUserLogin(UserLogin);
+    return userApiSource.getUserLogin(UserLogin);
   },
 
   getUserProfile(userId: string, token: string) {
@@ -23,6 +19,6 @@ export const userService = {
   },
 
   getInfoUserEdit(id: string) {
-    return getInfoUserEdit(id);
+    return userApiSource.getInfoUserEdit(id);
   },
 };

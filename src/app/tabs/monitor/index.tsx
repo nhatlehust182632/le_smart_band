@@ -1,18 +1,30 @@
+import { useAuth } from "@/context/AuthContext";
+import { monitorHook } from "@/hooks/monitor";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { styles } from "../../../styles/appStyles";
 
+type HeartRate = {
+  id: string,
+  name: string,
+  age: string,
+  relation: string,
+  heartRate: string,
+  status: string,
+  isConnected: string,
+  location: string,
+};
 const monitoredPeople = [
   {
     id: "001",
@@ -47,6 +59,51 @@ const monitoredPeople = [
 ];
 
 export default function MonitorListScreen() {
+  const [loading, setLoading] = useState(false);
+  const [monitorFriend, setMonitorFriend] = useState<HeartRate[]>([]);
+  const {
+    getListMonitors
+  } = monitorHook();
+  const { user } = useAuth();
+
+  const handleGetHeartRate = async () => {
+    if (loading) return;
+    try {
+      setLoading(true);
+      const data = await getListMonitors(user?.id || "");
+      console.log("monitor: " + data);
+
+      setMonitorFriend(data);
+    } catch (error) {
+      console.log("Lỗi lấy nhịp tim:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getListFriend = async () => {
+    if (loading) return;
+    try {
+      // console.log("LOCATION PAYLOAD =>", payload);
+      // setLoading(true);
+      // const data = await savePlaceNow(payload);
+
+      // setDataLocation(data);
+
+      // const data1 = await getListHistory(user?.id || "");
+      // console.log("locationData: " + data1);
+      // setDataHistory(data1);
+    } catch (error) {
+      console.log("Save location error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    handleGetHeartRate();
+  }, [])
+
   return (
     <SafeAreaView style={localStyles.safeOrange}>
       <StatusBar barStyle="light-content" />
@@ -65,7 +122,7 @@ export default function MonitorListScreen() {
             <Text style={styles.sectionTitle}>Người được giám sát</Text>
           </View>
 
-          {monitoredPeople.map((person) => (
+          {monitorFriend?.map((person) => (
             <TouchableOpacity
               key={person.id}
               style={localStyles.personCard}

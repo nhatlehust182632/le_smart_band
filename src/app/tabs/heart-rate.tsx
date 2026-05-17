@@ -4,13 +4,13 @@ import { FontAwesome5, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useState } from "react";
 import {
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Polyline, Text as SvgText } from "react-native-svg";
 import { styles } from "../../styles/appStyles";
 
@@ -58,7 +58,6 @@ export default function HeartRateScreen() {
     try {
       setLoading(true);
       const data = await getInfoHeartRateByTimes(user?.id || "", timeRange);
-      console.log("data123: " + data);
 
       setHeartRateChartData(data || []);
     } catch (error) {
@@ -143,7 +142,7 @@ export default function HeartRateScreen() {
     return (
       paddingLeft +
       (index * (chartWidth - paddingLeft - paddingRight)) /
-        (heartRateChartData?.length - 1)
+      (heartRateChartData?.length - 1)
     );
   };
 
@@ -152,7 +151,7 @@ export default function HeartRateScreen() {
       chartHeight -
       paddingBottom -
       ((value - minValue) / (maxValue - minValue)) *
-        (chartHeight - paddingTop - paddingBottom)
+      (chartHeight - paddingTop - paddingBottom)
     );
   };
 

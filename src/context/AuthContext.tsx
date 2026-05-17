@@ -5,6 +5,7 @@ import React, { createContext, useContext, useMemo, useState } from "react";
 type User = {
   id: string;
   name?: string;
+  device_code?: string;
 };
 
 type AuthContextType = {
@@ -34,6 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser({
       id: data?.id,
       name: data?.full_name,
+      device_code: data?.device_code,
     });
   };
 
@@ -71,7 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password_hash: password,
     };
     const data = await userService.postUserRegister(userRegister);
-    console.log("Heart rate:", data);
+    console.log("Register User:", data);
     setUser({
       id: data?.id,
       name: data?.full_name,

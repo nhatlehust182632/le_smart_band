@@ -56,6 +56,7 @@ export default function TabsLayout() {
         },
       })}
     >
+      <Tabs.Screen name="test_connectdevice" options={{ title: "test" }} />
       <Tabs.Screen name="index" options={{ title: "Trang chủ" }} />
       <Tabs.Screen name="heart-rate" options={{ title: "Nhịp tim" }} />
       <Tabs.Screen name="location" options={{ title: "Định vị" }} />

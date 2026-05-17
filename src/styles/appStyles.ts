@@ -15,7 +15,7 @@ export const styles = StyleSheet.create({
   headerTop: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
   },
   centerHeader: {
     alignItems: "center",
@@ -89,6 +89,12 @@ export const styles = StyleSheet.create({
   },
   primaryBtn: {
     backgroundColor: "#1565C0",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  primaryBtnNKT: {
+    backgroundColor: "#FF3B30",
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 12,

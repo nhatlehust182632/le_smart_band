@@ -43,4 +43,33 @@ export const deviceApis: Record<string, ApiConfig> = {
     },
     transformResponse: (data) => data?.data || data,
   },
+
+  getDevicesCheck: {
+    name: "getDevicesCheck",
+    baseUrl: ENV.USER_API_BASE_URL,
+    endpoint: "/api/device/checkDeviceExist",
+    method: "GET",
+    timeout: ENV.DEFAULT_TIMEOUT,
+    retries: 2,
+    authType: "bearer",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    transformResponse: (data) => data?.data || data,
+  },
+
+  postSaveDevicesWithUser: {
+    name: "postSaveDevicesWithUser",
+    baseUrl: ENV.USER_API_BASE_URL,
+    endpoint: "/api/device/saveDevicesWithUser",
+    method: "POST",
+    timeout: ENV.DEFAULT_TIMEOUT,
+    retries: 2,
+    authType: "bearer",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    token: "USER_ACCESS_TOKEN",
+    transformResponse: (data) => data?.data || data,
+  },
 };

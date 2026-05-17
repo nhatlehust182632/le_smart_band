@@ -1,19 +1,20 @@
+import { monitorHook } from "@/hooks/monitor";
 import {
-    FontAwesome5,
-    Ionicons,
-    MaterialCommunityIcons,
+  FontAwesome5,
+  Ionicons,
+  MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { styles } from "../../../styles/appStyles";
 
@@ -59,24 +60,63 @@ const monitorDetails: Record<string, any> = {
   },
 };
 
-export default function MonitorDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const person = monitorDetails[id || "001"];
+type HeartRate = {
+  name: string,
+  age: string,
+  relation: string,
+  heartRate: string,
+  heartStatus: string,
+  status: string,
+  isConnected: string,
+  lastLocation: string,
+  riskLevel: string,
+  locationUpdatedAt: string,
+  lastSync: string,
+  battery: string
+};
 
-  if (!person) {
-    return (
-      <SafeAreaView
-        style={{
-          flex: 1,
-          backgroundColor: "#fff",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <Text>Không tìm thấy người được giám sát</Text>
-      </SafeAreaView>
-    );
-  }
+export default function MonitorDetailScreen() {
+  const [loading, setLoading] = useState(false);
+  const { id } = useLocalSearchParams<{ id: string }>();
+  // const person = monitorDetails[id || "001"];
+  const [monitorId, setMonitorId] = useState<HeartRate | null>(null);
+  const {
+    getMonitorId
+  } = monitorHook();
+
+  const handleGetHeartRate = async () => {
+    if (loading) return;
+    try {
+      setLoading(true);
+      const data = await getMonitorId(id || "");
+      console.log("monitor: " + data);
+
+      setMonitorId(data);
+    } catch (error) {
+      console.log("Lỗi lấy nhịp tim:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    handleGetHeartRate();
+  }, [])
+
+  // if (!person) {
+  //   return (
+  //     <SafeAreaView
+  //       style={{
+  //         flex: 1,
+  //         backgroundColor: "#fff",
+  //         justifyContent: "center",
+  //         alignItems: "center",
+  //       }}
+  //     >
+  //       <Text>Không tìm thấy người được giám sát</Text>
+  //     </SafeAreaView>
+  //   );
+  // }
 
   return (
     <SafeAreaView style={localStyles.safeOrange}>
@@ -94,7 +134,7 @@ export default function MonitorDetailScreen() {
 
               <View style={{ flex: 1 }}>
                 <Text style={styles.greeting}>Chi tiết giám sát</Text>
-                <Text style={styles.subGreeting}>{person.name}</Text>
+                <Text style={styles.subGreeting}>{monitorId?.name}</Text>
               </View>
 
               <View style={{ width: 40 }} />
@@ -105,7 +145,7 @@ export default function MonitorDetailScreen() {
             <View style={styles.avatarWrap}>
               <Ionicons name="person" size={42} color="#EF6C00" />
             </View>
-            <Text style={styles.profileName}>{person.name}</Text>
+            <Text style={styles.profileName}>{monitorId?.name}</Text>
             <Text style={styles.profileRole}>Người được giám sát</Text>
 
             <View style={styles.profileTagRow}>
@@ -113,21 +153,21 @@ export default function MonitorDetailScreen() {
                 <Text
                   style={[styles.profileTagText, localStyles.orangeTagText]}
                 >
-                  Tuổi: {person.age}
+                  Tuổi: {monitorId?.age}
                 </Text>
               </View>
               <View style={[styles.profileTag, localStyles.orangeTag]}>
                 <Text
                   style={[styles.profileTagText, localStyles.orangeTagText]}
                 >
-                  Quan hệ: {person.relation}
+                  Quan hệ: {monitorId?.relation}
                 </Text>
               </View>
               <View style={[styles.profileTag, localStyles.orangeTag]}>
                 <Text
                   style={[styles.profileTagText, localStyles.orangeTagText]}
                 >
-                  Mức độ: {person.riskLevel}
+                  Mức độ: {monitorId?.riskLevel}
                 </Text>
               </View>
             </View>
@@ -153,21 +193,21 @@ export default function MonitorDetailScreen() {
               <Text
                 style={[
                   styles.infoValue,
-                  { color: person.isConnected ? "#2E7D32" : "#D32F2F" },
+                  { color: monitorId?.isConnected ? "#2E7D32" : "#D32F2F" },
                 ]}
               >
-                {person.isConnected ? "Đã kết nối" : "Mất kết nối"}
+                {monitorId?.isConnected ? "Đã kết nối" : "Mất kết nối"}
               </Text>
             </View>
 
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Pin thiết bị</Text>
-              <Text style={styles.infoValue}>{person.battery}%</Text>
+              <Text style={styles.infoValue}>{monitorId?.battery}%</Text>
             </View>
 
             <View style={styles.infoItemNoBorder}>
               <Text style={styles.infoLabel}>Đồng bộ lần cuối</Text>
-              <Text style={styles.infoValue}>{person.lastSync}</Text>
+              <Text style={styles.infoValue}>{monitorId?.lastSync}</Text>
             </View>
           </View>
 
@@ -179,12 +219,12 @@ export default function MonitorDetailScreen() {
             <View style={styles.mainHeartRow}>
               <FontAwesome5 name="heartbeat" size={34} color="#fff" />
               <Text style={styles.mainHeartValue}>
-                {person.currentHeartRate}
+                {monitorId?.heartRate}
               </Text>
               <Text style={styles.mainHeartUnit}>BPM</Text>
             </View>
             <Text style={styles.mainHeartWarning}>
-              Trạng thái: {person.heartStatus}
+              Trạng thái: {monitorId?.heartStatus}
             </Text>
           </LinearGradient>
 
@@ -196,12 +236,12 @@ export default function MonitorDetailScreen() {
 
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Địa điểm</Text>
-              <Text style={styles.infoValue}>{person.lastLocation}</Text>
+              <Text style={styles.infoValue}>{monitorId?.lastLocation}</Text>
             </View>
 
             <View style={styles.infoItemNoBorder}>
               <Text style={styles.infoLabel}>Cập nhật lúc</Text>
-              <Text style={styles.infoValue}>{person.locationUpdatedAt}</Text>
+              <Text style={styles.infoValue}>{monitorId?.locationUpdatedAt}</Text>
             </View>
 
             <TouchableOpacity

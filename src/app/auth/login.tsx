@@ -4,7 +4,6 @@ import { router } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
@@ -12,6 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { useAuth } from "../../context/AuthContext";
 
 export default function LoginScreen() {
@@ -21,24 +22,6 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("123456");
 
   const handleLogin = async () => {
-    // const sensorData: SensorData = {
-    //   id: 3,
-    //   heart_rate: 80,
-    //   spo2: 98,
-    //   steps: 1200,
-    //   created_at: "2026-03-17T10:30:00Z",
-    // };
-    // try {
-    //   const data = await healthService.getHeartRate(
-    //     "BAND001",
-    //     "USER_ACCESS_TOKEN",
-    //     sensorData,
-    //   );
-    //   console.log("Heart rate:", data);
-    // } catch (error) {
-    //   logger.error("Main app error", error);
-    // }
-    /////////////////////
     if (loading) return; //  🔥 CHẶN SPAM TẠI ĐÂY
     try {
       setLoading(true);
@@ -50,10 +33,6 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
-
-  // useEffect(() => {
-  //   handleLogin();
-  // }, []);
 
   if (loading) {
     return <LoadingScreen message="Đang tải danh sách giám sát..." />;

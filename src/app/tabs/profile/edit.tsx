@@ -1,6 +1,5 @@
 import { User } from "@/api/models/user.model";
 import { useAuth } from "@/context/AuthContext";
-import { getInfoUserEdit, postInfoUserSave } from "@/data-sources/userSource";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -8,7 +7,6 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   Modal,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -18,6 +16,8 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { userApiSource } from "../../../data-sources/ApiSource/userApiSource";
 import { styles } from "../../../styles/appStyles";
 
 export default function EditProfileScreen() {
@@ -37,7 +37,7 @@ export default function EditProfileScreen() {
     if (loading) return;
     try {
       setLoading(true);
-      const data = await getInfoUserEdit(user?.id || "");
+      const data = await userApiSource.getInfoUserEdit(user?.id || "");
       setFullName(data?.full_name);
       setPhone(data?.phone);
       setEmergency_contact_name(data?.emergency_contact_name);
@@ -86,7 +86,7 @@ export default function EditProfileScreen() {
         emergency_contact_name: emergency_contact_name,
         emergency_contact_phone: emergency_contact_phone,
       };
-      const data = await postInfoUserSave(paramData);
+      const data = await userApiSource.postInfoUserSave(paramData);
       console.log("Profile: ", data);
       Alert.alert("Thành công", "Cập nhật thông tin thành công.");
       router.back();
