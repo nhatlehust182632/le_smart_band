@@ -15,7 +15,14 @@ export type ParsedBlePayload = {
 
     bytesPerValue?: number;
     valueCount?: number;
+
+    // TYPE 6
     values?: number[];
+
+    // TYPE 5
+    xValues?: number[];
+    yValues?: number[];
+    zValues?: number[];
 
     remainingByteCount?: number;
     remainingBytes?: number[];
@@ -90,7 +97,13 @@ export type GroupedPacketSummary = {
     totalDataCount: number;
     totalPayloadByteLength: number;
 
-    mergedValues: number[];
+    // TYPE 6
+    mergedValues?: number[];
+
+    // TYPE 5
+    mergedXValues?: number[];
+    mergedYValues?: number[];
+    mergedZValues?: number[];
 };
 
 export type BlePacketSummary = {
@@ -117,18 +130,6 @@ export type BlePacketSummary = {
     };
 };
 
-/**
- * 1 cụm nhỏ của type 6.
- *
- * Theo nghiệp vụ:
- * - smallGroup 1: index 1 -> 4
- * - smallGroup 2: index 5 -> 8
- * - smallGroup 3: index 9 -> 12
- *
- * Mỗi cụm nhỏ có:
- * - 4 packet
- * - 4 * 125 = 500 dữ liệu
- */
 export type Type6MiniGroup = {
     packetId: number;
     miniGroupNo: 1 | 2 | 3;
@@ -149,12 +150,6 @@ export type Type6MiniGroup = {
     isComplete: boolean;
 };
 
-/**
- * Cửa sổ trượt type 6 gồm 3 cụm nhỏ liên tiếp.
- *
- * Tổng dữ liệu:
- * 500 + 500 + 500 = 1500
- */
 export type Type6SlidingWindow = {
     windowNo: number;
 
@@ -166,4 +161,52 @@ export type Type6SlidingWindow = {
     values: number[];
     totalDataCount: number;
     expectedDataCount: 1500;
+};
+
+export type Type5MiniGroup = {
+    packetId: number;
+    miniGroupNo: 1 | 2 | 3;
+
+    sourcePacketIndexes: number[];
+    macList: string[];
+
+    xValues: number[];
+    yValues: number[];
+    zValues: number[];
+
+    totalDataCountPerAxis: number;
+    expectedDataCountPerAxis: 500;
+
+    isComplete: boolean;
+};
+
+export type Type5SlidingWindow = {
+    windowNo: number;
+
+    miniGroups: [Type5MiniGroup, Type5MiniGroup, Type5MiniGroup];
+
+    packetIds: number[];
+    miniGroupNos: Array<1 | 2 | 3>;
+
+    xValues: number[];
+    yValues: number[];
+    zValues: number[];
+
+    totalDataCountPerAxis: number;
+    expectedDataCountPerAxis: 1500;
+};
+
+export type SensorFusionModelInput = {
+    modelInputNo: number;
+
+    type5WindowNo: number;
+    type6WindowNo: number;
+
+    xValues: number[];
+    yValues: number[];
+    zValues: number[];
+    type6Values: number[];
+
+    totalType5DataCountPerAxis: number;
+    totalType6DataCount: number;
 };

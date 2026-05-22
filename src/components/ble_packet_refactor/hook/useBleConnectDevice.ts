@@ -18,8 +18,11 @@ import {
 
 import type {
     BlePacketItem,
-    BlePacketSummary,
+    GroupedPacketSummary,
     ReadTarget,
+    SensorFusionModelInput,
+    Type5MiniGroup,
+    Type5SlidingWindow,
     Type6MiniGroup,
     Type6SlidingWindow,
 } from "../types/blePacket.types";
@@ -28,20 +31,57 @@ import { decodeBlePacket } from "../utils/decodeBlePacket";
 
 import {
     buildGroupedPacketSummary,
-    logGroupedPacketSummary,
 } from "../utils/summarizeBlePackets";
+
+import {
+    buildType5MiniGroupsFromPackets,
+    createType5SlidingWindow,
+} from "../utils/type5SlidingWindows";
 
 import {
     buildType6MiniGroupsFromPackets,
     createType6SlidingWindow,
-    processType6SlidingWindowDemo,
 } from "../utils/type6SlidingWindows";
+
+import {
+    createSensorFusionModelInput,
+    processSensorFusionModelDemo,
+} from "../utils/sensorFusionModelDemo";
 
 import {
     runDemoBlePacketSession,
     stopDemoBlePacketTimers,
 } from "../demo/runDemoBlePackets";
 
+import {
+    appendPacketToBleTrackedBatch,
+    createBleTrackedBatch,
+    getBleTrackedBatchCompleteness,
+    type BleTrackedBatch,
+} from "../utils/packetBatchTracker";
+
+/**
+ * Hook điều phối toàn bộ nghiệp vụ BLE:
+ *
+ * 1. Scan và connect thiết bị.
+ * 2. Sau connect:
+ *      - DEMO: bơm packet Base64 demo vào printData().
+ *      - REAL: nhận packet thật qua Notify/Poll.
+ * 3. Batch packet được gom theo packetId:
+ *      - Batch bắt đầu tại thời điểm packet đầu tiên của packetId đó xuất hiện.
+ *      - Một batch được coi là COMPLETE khi:
+ *          + Type 5 đủ index 1 -> 19
+ *          + Type 6 đủ index 1 -> 12
+ *      - Nếu packetId mới tới khi batch cũ chưa đủ:
+ *          + Batch cũ được chốt INCOMPLETE.
+ *      - Nếu hết 30 giây từ packet đầu tiên mà chưa đủ:
+ *          + Batch cũ được chốt TIMEOUT.
+ * 4. Sau khi batch được chốt:
+ *      - Tổng hợp type 5 / type 6
+ *      - Tạo sliding window
+ *      - Ghép 4 mảng đầu vào model demo
+ * 5. Model input chạy tuần tự, BLE vẫn tiếp tục nhận batch mới.
+ */
 export const useBleConnectDevice = () => {
     const bleManagerRef = useRef(new BleManager());
 
@@ -51,55 +91,208 @@ export const useBleConnectDevice = () => {
     const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const bleCollectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const demoPacketTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+    const activeBatchTimeoutRef =
+        useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const demoPacketTimersRef =
+        useRef<ReturnType<typeof setTimeout>[]>([]);
+
+    const demoNextBatchTimerRef =
+        useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const demoSessionIndexRef = useRef(0);
 
-    const blePacketsRef = useRef<BlePacketItem[]>([]);
-    const bleCollectStartAtRef = useRef<number | null>(null);
-    const bleFirstPacketAtRef = useRef<number | null>(null);
-    const bleLastPacketAtRef = useRef<number | null>(null);
-    const blePacketIndexRef = useRef(0);
+    /**
+     * Batch đang được thu theo packetId.
+     */
+    const activePacketBatchRef = useRef<BleTrackedBatch | null>(null);
 
     /**
-     * Hàng đợi chỉ giữ tối đa 2 cụm nhỏ cuối cùng.
-     * Khi có cụm nhỏ mới, ta ghép:
-     * [2 cụm cũ gần nhất] + [cụm mới]
-     * để tạo một cửa sổ 1500 dữ liệu.
+     * Dùng để bỏ qua packet trễ/duplicate của batch đã COMPLETE
+     * trong phần thời gian còn lại của chu kỳ 30 giây.
+     */
+    const lastFinalizedBatchRef = useRef<{
+        packetId: number;
+        startedAtMs: number;
+        finalizedAtMs: number;
+    } | null>(null);
+
+    /**
+     * Thứ tự packet đi vào app, dùng để debug nội bộ và giữ thứ tự ổn định.
+     */
+    const packetItemSequenceRef = useRef(0);
+
+    /**
+     * Queue mini group type 5.
+     * Chỉ giữ tối đa 2 group gần nhất sau khi tạo xong 1 window,
+     * để group mới tiếp theo có thể tạo sliding window:
+     * A1+A2+A3, A2+A3+B1, A3+B1+B2, ...
+     */
+    const type5MiniGroupQueueRef = useRef<Type5MiniGroup[]>([]);
+    const type5SlidingWindowQueueRef = useRef<Type5SlidingWindow[]>([]);
+    const type5WindowCounterRef = useRef(0);
+
+    /**
+     * Queue mini group type 6.
+     * Cách chạy sliding window giống type 5.
      */
     const type6MiniGroupQueueRef = useRef<Type6MiniGroup[]>([]);
+    const type6SlidingWindowQueueRef = useRef<Type6SlidingWindow[]>([]);
     const type6WindowCounterRef = useRef(0);
 
     /**
- * Queue các window 1500 dữ liệu type 6 đang chờ đưa vào hàm xử lý.
- */
-    const type6ProcessingQueueRef = useRef<Type6SlidingWindow[]>([]);
-
-    /**
-     * Đảm bảo mỗi lần chỉ xử lý 1 window.
-     * Window sau phải chờ window trước trả kết quả xong.
+     * Queue đầu vào cuối cùng cho hàm demo/model.
+     *
+     * Mỗi item gồm 4 mảng:
+     * - xValues: 1500 mẫu type 5
+     * - yValues: 1500 mẫu type 5
+     * - zValues: 1500 mẫu type 5
+     * - type6Values: 1500 mẫu type 6
      */
-    const isProcessingType6WindowRef = useRef(false);
+    const sensorFusionProcessingQueueRef =
+        useRef<SensorFusionModelInput[]>([]);
+
+    const sensorFusionModelInputCounterRef = useRef(0);
+    const isProcessingSensorFusionQueueRef = useRef(false);
 
     const [scanModalVisible, setScanModalVisible] = useState(false);
     const [devices, setDevices] = useState<Device[]>([]);
     const [scanning, setScanning] = useState(false);
     const [status, setStatus] = useState("Chưa kết nối");
-    const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
+    const [connectedDevice, setConnectedDevice] =
+        useState<Device | null>(null);
 
-    const resetBlePacketCollection = () => {
-        blePacketsRef.current = [];
-        bleCollectStartAtRef.current = null;
-        bleFirstPacketAtRef.current = null;
-        bleLastPacketAtRef.current = null;
-        blePacketIndexRef.current = 0;
+    /**
+     * Reset batch packet đang active.
+     * Không xóa queue model/sliding-window.
+     */
+    const resetActivePacketBatch = () => {
+        activePacketBatchRef.current = null;
 
-        if (bleCollectionTimeoutRef.current) {
-            clearTimeout(bleCollectionTimeoutRef.current);
-            bleCollectionTimeoutRef.current = null;
+        if (activeBatchTimeoutRef.current) {
+            clearTimeout(activeBatchTimeoutRef.current);
+            activeBatchTimeoutRef.current = null;
         }
     };
 
+    /**
+     * Xóa toàn bộ queue xử lý model/window.
+     * Dùng khi người dùng chủ động ngắt kết nối hoặc màn hình unmount.
+     */
+    const resetProcessingQueues = () => {
+        type5MiniGroupQueueRef.current = [];
+        type5SlidingWindowQueueRef.current = [];
+        type5WindowCounterRef.current = 0;
+
+        type6MiniGroupQueueRef.current = [];
+        type6SlidingWindowQueueRef.current = [];
+        type6WindowCounterRef.current = 0;
+
+        sensorFusionProcessingQueueRef.current = [];
+        sensorFusionModelInputCounterRef.current = 0;
+        isProcessingSensorFusionQueueRef.current = false;
+
+        lastFinalizedBatchRef.current = null;
+    };
+
+
+    /**
+     * Hiển thị 1 giá trị đơn nếu danh sách chỉ có 1 phần tử,
+     * ngược lại giữ nguyên danh sách để dễ phát hiện nhiều ID/MAC khác nhau.
+     */
+    const compactSingleOrList = <T,>(values: T[]): T | T[] | [] => {
+        if (values.length === 0) {
+            return [];
+        }
+
+        if (values.length === 1) {
+            return values[0];
+        }
+
+        return values;
+    };
+
+    /**
+     * Log tóm tắt dữ liệu thu được của từng loại gói sau mỗi cửa sổ 30 giây.
+     *
+     * Chỉ log các thông tin cần theo dõi:
+     * - type
+     * - MAC
+     * - packetIds
+     * - packetIndexes
+     * - tổng số dữ liệu
+     * - thời gian nhận được theo type
+     */
+    const logBleTypeCollectionSummary = (
+        packets: BlePacketItem[],
+        groupedSummary: GroupedPacketSummary
+    ) => {
+        const packetsOfType = packets.filter((packet) => {
+            return (
+                packet.data.header?.packetType.dec === groupedSummary.packetType
+            );
+        });
+
+        const receivedTimestamps = packetsOfType
+            .map((packet) => Date.parse(packet.receivedAt))
+            .filter((timestamp) => Number.isFinite(timestamp));
+
+        const firstReceivedAt =
+            receivedTimestamps.length > 0
+                ? new Date(Math.min(...receivedTimestamps)).toISOString()
+                : null;
+
+        const lastReceivedAt =
+            receivedTimestamps.length > 0
+                ? new Date(Math.max(...receivedTimestamps)).toISOString()
+                : null;
+
+        const receiveDurationMs =
+            receivedTimestamps.length > 1
+                ? Math.max(...receivedTimestamps) -
+                Math.min(...receivedTimestamps)
+                : 0;
+
+        /**
+         * Với type 5, các độ dài bên dưới là số lượng SAU KHI:
+         * - giữ toàn bộ 18 gói đầu
+         * - gói index 19 chỉ giữ 6 mẫu đầu
+         * - bỏ 77 mẫu dư
+         *
+         * Vì vậy type5x/type5y/type5z phải là 1500 khi dữ liệu đủ.
+         */
+        const totalData =
+            groupedSummary.packetType === 5
+                ? {
+                    type5x: groupedSummary.mergedXValues?.length ?? 0,
+                    type5y: groupedSummary.mergedYValues?.length ?? 0,
+                    type5z: groupedSummary.mergedZValues?.length ?? 0,
+                }
+                : {
+                    type6: groupedSummary.mergedValues?.length ?? 0,
+                };
+
+        console.log("[BLE TYPE SUMMARY]", {
+            type: groupedSummary.packetType,
+            mac: compactSingleOrList(groupedSummary.macList),
+            packetIds: compactSingleOrList(groupedSummary.packetIdList),
+            packetIndexes: groupedSummary.packetIndexList,
+            totalData,
+            receiveTime: {
+                firstReceivedAt,
+                lastReceivedAt,
+                receiveDurationMs,
+            },
+        });
+    };
+
+    /**
+     * Dừng các tác vụ BLE phụ:
+     * - scan
+     * - timeout scan
+     * - notify subscriptions
+     * - poll interval
+     */
     const stopAll = () => {
         bleManagerRef.current.stopDeviceScan();
 
@@ -121,11 +314,21 @@ export const useBleConnectDevice = () => {
         setScanning(false);
     };
 
+    /**
+     * Ngắt kết nối BLE hoàn toàn.
+     */
     const disconnect = async () => {
         try {
             stopAll();
             stopDemoBlePacketTimers(demoPacketTimersRef.current);
-            resetBlePacketCollection();
+
+            if (demoNextBatchTimerRef.current) {
+                clearTimeout(demoNextBatchTimerRef.current);
+                demoNextBatchTimerRef.current = null;
+            }
+
+            resetActivePacketBatch();
+            resetProcessingQueues();
 
             if (deviceRef.current) {
                 await deviceRef.current.cancelConnection();
@@ -134,106 +337,162 @@ export const useBleConnectDevice = () => {
             deviceRef.current = null;
             setConnectedDevice(null);
             setStatus("Đã ngắt kết nối");
-        } catch (error) {
-            console.log("DISCONNECT ERROR:", error);
+        } catch {
         }
     };
 
     /**
- * Xử lý tuần tự các cửa sổ type 6.
- *
- * Nghiệp vụ:
- * - Lấy window đầu queue
- * - Đưa vào hàm demo/model
- * - Await kết quả
- * - Log kết quả
- * - Xóa window đó khỏi queue
- * - Tiếp tục window kế tiếp nếu còn
- *
- * Trong lúc hàm này chạy:
- * - BLE vẫn tiếp tục nhận packet mới
- * - Buffer 30 giây mới vẫn tiếp tục được ghi
- */
-    const processType6WindowQueueSequentially = async () => {
-        if (isProcessingType6WindowRef.current) {
+     * Chạy queue model tuần tự.
+     *
+     * Nếu đang có 1 input model chạy rồi, hàm sẽ return.
+     * Khi input đang chạy xong, input kế tiếp mới được lấy ra.
+     *
+     * Trong lúc này BLE vẫn tiếp tục ghi packet vào buffer 30 giây mới.
+     */
+    const processSensorFusionQueueSequentially = async () => {
+        if (isProcessingSensorFusionQueueRef.current) {
             return;
         }
 
-        isProcessingType6WindowRef.current = true;
+        isProcessingSensorFusionQueueRef.current = true;
 
         try {
-            while (type6ProcessingQueueRef.current.length > 0) {
-                const currentWindow = type6ProcessingQueueRef.current.shift();
+            while (sensorFusionProcessingQueueRef.current.length > 0) {
+                const modelInput =
+                    sensorFusionProcessingQueueRef.current.shift();
 
-                if (!currentWindow) {
+                if (!modelInput) {
                     continue;
                 }
 
-                console.log("========== BẮT ĐẦU XỬ LÝ TYPE 6 WINDOW ==========");
-                console.log("WINDOW NO:", currentWindow.windowNo);
-                console.log("PACKET IDS:", currentWindow.packetIds);
-                console.log("MINI GROUP NOS:", currentWindow.miniGroupNos);
-                console.log("TỔNG DỮ LIỆU ĐẦU VÀO:", currentWindow.totalDataCount);
-                console.log("==================================================");
+                console.log("[MODEL INPUT SENT]", {
+                    modelCallCount: modelInput.modelInputNo,
+                    arrayLengths: {
+                        type6: modelInput.type6Values.length,
+                        type5x: modelInput.xValues.length,
+                        type5y: modelInput.yValues.length,
+                        type5z: modelInput.zValues.length,
+                    },
+                });
 
                 /**
-                 * Đây chính là chỗ đưa 1500 dữ liệu vào hàm demo/model.
-                 * Sau này bạn thay hàm này bằng model thật.
+                 * Đây là vị trí duy nhất đưa 4 mảng vào hàm demo/model.
+                 *
+                 * Sau này bạn chỉ cần thay phần thân của:
+                 * processSensorFusionModelDemo(...)
+                 * bằng model thật.
                  */
-                const result =
-                    await processType6SlidingWindowDemo(currentWindow);
+                await processSensorFusionModelDemo(modelInput);
 
-                console.log("========== KẾT QUẢ TYPE 6 WINDOW ==========");
-                console.log("WINDOW NO:", currentWindow.windowNo);
-                console.log("KẾT QUẢ HÀM DEMO:", result);
-                console.log("============================================");
+
 
                 /**
                  * Sau khi xử lý xong:
-                 * - currentWindow không còn nằm trong queue
-                 * - biến local currentWindow sẽ được JS giải phóng khi vòng lặp sang lượt mới
-                 * => dữ liệu cũ coi như đã được bỏ đi.
+                 * - modelInput đã bị shift khỏi queue
+                 * - local variable sẽ tự được giải phóng khi sang vòng lặp mới
+                 * => dữ liệu cũ không còn giữ trong queue xử lý nữa.
                  */
             }
-        } catch (error) {
-            console.log("PROCESS TYPE 6 WINDOW ERROR:", error);
+        } catch {
         } finally {
-            isProcessingType6WindowRef.current = false;
+            isProcessingSensorFusionQueueRef.current = false;
         }
     };
 
     /**
-     * Đưa các cụm nhỏ type 6 hoàn chỉnh vào hàng đợi trượt.
-     *
-     * Mỗi khi có đủ 3 cụm nhỏ liên tiếp:
-     * - tạo 1 cửa sổ 1500 dữ liệu
-     * - gọi hàm demo processType6SlidingWindowDemo()
-     * - giữ lại 2 cụm nhỏ cuối để ghép với cụm mới tiếp theo
+     * Khi đã có sliding window type 5 và type 6,
+     * ghép chúng theo thứ tự tạo ra để thành đầu vào model.
      */
-    const appendType6MiniGroupsAndProcessWindows = (
+    const pairType5AndType6WindowsForModel = () => {
+        while (
+            type5SlidingWindowQueueRef.current.length > 0 &&
+            type6SlidingWindowQueueRef.current.length > 0
+        ) {
+            const type5Window =
+                type5SlidingWindowQueueRef.current.shift();
+
+            const type6Window =
+                type6SlidingWindowQueueRef.current.shift();
+
+            if (!type5Window || !type6Window) {
+                continue;
+            }
+
+            sensorFusionModelInputCounterRef.current += 1;
+
+            const modelInput = createSensorFusionModelInput(
+                sensorFusionModelInputCounterRef.current,
+                type5Window,
+                type6Window
+            );
+
+            sensorFusionProcessingQueueRef.current.push(modelInput);
+        }
+
+        void processSensorFusionQueueSequentially();
+    };
+
+    /**
+     * Nhận các mini group type 5 hoàn chỉnh,
+     * tạo sliding window 1500 mẫu/trục.
+     */
+    const appendType5MiniGroupsAndBuildWindows = (
+        miniGroups: Type5MiniGroup[]
+    ) => {
+        const completeMiniGroups = miniGroups.filter((miniGroup) => {
+            return miniGroup.isComplete;
+        });
+
+        completeMiniGroups.forEach((miniGroup) => {
+            type5MiniGroupQueueRef.current.push(miniGroup);
+
+            if (type5MiniGroupQueueRef.current.length >= 3) {
+                const lastThreeGroups =
+                    type5MiniGroupQueueRef.current.slice(-3) as [
+                        Type5MiniGroup,
+                        Type5MiniGroup,
+                        Type5MiniGroup
+                    ];
+
+                type5WindowCounterRef.current += 1;
+
+                const slidingWindow = createType5SlidingWindow(
+                    type5WindowCounterRef.current,
+                    lastThreeGroups
+                );
+
+                type5SlidingWindowQueueRef.current.push(slidingWindow);
+
+                /**
+                 * Chỉ giữ lại 2 mini group gần nhất để tạo cửa sổ trượt tiếp theo.
+                 */
+                type5MiniGroupQueueRef.current =
+                    type5MiniGroupQueueRef.current.slice(-2);
+            }
+        });
+    };
+
+    /**
+     * Nhận các mini group type 6 hoàn chỉnh,
+     * tạo sliding window 1500 giá trị.
+     */
+    const appendType6MiniGroupsAndBuildWindows = (
         miniGroups: Type6MiniGroup[]
     ) => {
         const completeMiniGroups = miniGroups.filter((miniGroup) => {
             return miniGroup.isComplete;
         });
 
-        const incompleteMiniGroups = miniGroups.filter((miniGroup) => {
-            return !miniGroup.isComplete;
-        });
-
-        if (incompleteMiniGroups.length > 0) {
-            console.warn("TYPE 6 MINI GROUP CHƯA ĐỦ DỮ LIỆU:", incompleteMiniGroups);
-        }
-
         completeMiniGroups.forEach((miniGroup) => {
             type6MiniGroupQueueRef.current.push(miniGroup);
 
             if (type6MiniGroupQueueRef.current.length >= 3) {
-                const lastThreeGroups = type6MiniGroupQueueRef.current.slice(-3) as [
-                    Type6MiniGroup,
-                    Type6MiniGroup,
-                    Type6MiniGroup
-                ];
+                const lastThreeGroups =
+                    type6MiniGroupQueueRef.current.slice(-3) as [
+                        Type6MiniGroup,
+                        Type6MiniGroup,
+                        Type6MiniGroup
+                    ];
 
                 type6WindowCounterRef.current += 1;
 
@@ -242,22 +501,10 @@ export const useBleConnectDevice = () => {
                     lastThreeGroups
                 );
 
-                /**
-                 * Không xử lý ngay tại đây.
-                 * Đưa window vào queue để đảm bảo:
-                 * - xử lý tuần tự
-                 * - window sau đợi window trước xong
-                 * - BLE vẫn nhận dữ liệu mới song song
-                 */
-                type6ProcessingQueueRef.current.push(slidingWindow);
-
-                void processType6WindowQueueSequentially();
+                type6SlidingWindowQueueRef.current.push(slidingWindow);
 
                 /**
-                 * Chỉ giữ lại 2 cụm gần nhất.
-                 * Ví dụ:
-                 * - Sau A1,A2,A3 -> xử lý A1+A2+A3, giữ A2,A3
-                 * - Có B1 -> xử lý A2+A3+B1, giữ A3,B1
+                 * Chỉ giữ lại 2 mini group gần nhất để tạo cửa sổ trượt tiếp theo.
                  */
                 type6MiniGroupQueueRef.current =
                     type6MiniGroupQueueRef.current.slice(-2);
@@ -265,133 +512,164 @@ export const useBleConnectDevice = () => {
         });
     };
 
-    const finishBlePacketCollection = async () => {
-        const endAt = Date.now();
-        const startAt = bleCollectStartAtRef.current ?? endAt;
+    /**
+     * Lên lịch demo batch tiếp theo đúng chu kỳ 30 giây tính từ batch start.
+     * Chỉ áp dụng khi USE_DEMO_BLE_DATA = true.
+     */
+    const scheduleNextDemoBatchFromBatchStart = (batchStartedAtMs: number) => {
+        if (!USE_DEMO_BLE_DATA) {
+            return;
+        }
 
-        /**
-         * Snapshot dữ liệu của phiên 30 giây vừa kết thúc.
-         * Từ đây trở đi xử lý trên snapshot này,
-         * không động vào buffer nhận packet mới nữa.
-         */
-        const packetsOfFinishedWindow = [...blePacketsRef.current];
-        const firstPacketAt = bleFirstPacketAtRef.current;
-        const lastPacketAt = bleLastPacketAtRef.current;
+        if (demoNextBatchTimerRef.current) {
+            clearTimeout(demoNextBatchTimerRef.current);
+            demoNextBatchTimerRef.current = null;
+        }
 
-        /**
-         * QUAN TRỌNG:
-         * Mở ngay cửa sổ nhận packet 30 giây tiếp theo.
-         *
-         * Nhờ vậy:
-         * - BLE vẫn tiếp tục ghi dữ liệu mới
-         * - xử lý snapshot cũ diễn ra độc lập
-         */
-        startBlePacketCollection();
+        const elapsedMs = Date.now() - batchStartedAtMs;
+        const delayMs = Math.max(0, BLE_COLLECTION_WINDOW_MS - elapsedMs);
 
-        /**
-         * Bắt đầu xử lý tập dữ liệu cũ vừa chốt.
-         */
+        demoNextBatchTimerRef.current = setTimeout(() => {
+            runSelectedDemoBlePacketSession();
+        }, delayMs);
+    };
+
+    type FinalizeBatchReason =
+        | "complete"
+        | "timeout"
+        | "packet_id_changed";
+
+    /**
+     * Chốt batch đang active, sau đó đẩy dữ liệu vào pipeline xử lý.
+     */
+    const finalizeActivePacketBatch = (
+        reason: FinalizeBatchReason
+    ) => {
+        const activeBatch = activePacketBatchRef.current;
+
+        if (!activeBatch) {
+            return;
+        }
+
+        const completeness = getBleTrackedBatchCompleteness(activeBatch);
+
+        if (activeBatchTimeoutRef.current) {
+            clearTimeout(activeBatchTimeoutRef.current);
+            activeBatchTimeoutRef.current = null;
+        }
+
+        activePacketBatchRef.current = null;
+
+        lastFinalizedBatchRef.current = {
+            packetId: activeBatch.packetId,
+            startedAtMs: activeBatch.startedAtMs,
+            finalizedAtMs: Date.now(),
+        };
+
+        console.log("[BLE BATCH STATUS]", {
+            packetId: activeBatch.packetId,
+            status: completeness.isComplete ? "COMPLETE" : "INCOMPLETE",
+            finalizeReason: reason,
+            totalPackets: activeBatch.packets.length,
+            type5MissingIndexes: completeness.type5.missingIndexes,
+            type6MissingIndexes: completeness.type6.missingIndexes,
+            firstReceivedAt: activeBatch.firstReceivedAt,
+            lastReceivedAt: activeBatch.lastReceivedAt,
+            durationMs:
+                new Date(activeBatch.lastReceivedAt).getTime() -
+                new Date(activeBatch.firstReceivedAt).getTime(),
+        });
+
+        const packetsOfFinishedBatch = [...activeBatch.packets];
+
         const groupedType5 = buildGroupedPacketSummary(
-            packetsOfFinishedWindow,
+            packetsOfFinishedBatch,
             5
         );
 
         const groupedType6 = buildGroupedPacketSummary(
-            packetsOfFinishedWindow,
+            packetsOfFinishedBatch,
             6
         );
 
+        const type5MiniGroups =
+            buildType5MiniGroupsFromPackets(packetsOfFinishedBatch);
+
         const type6MiniGroups =
-            buildType6MiniGroupsFromPackets(packetsOfFinishedWindow);
+            buildType6MiniGroupsFromPackets(packetsOfFinishedBatch);
 
-        const summary: BlePacketSummary = {
-            device: {
-                id: deviceRef.current?.id ?? connectedDevice?.id ?? null,
-                name: deviceRef.current?.name ?? connectedDevice?.name ?? null,
-            },
-
-            packetCount: packetsOfFinishedWindow.length,
-
-            collectStartedAt: new Date(startAt).toISOString(),
-            collectEndedAt: new Date(endAt).toISOString(),
-            collectWindowMs: endAt - startAt,
-
-            firstPacketAt: firstPacketAt
-                ? new Date(firstPacketAt).toISOString()
-                : null,
-
-            lastPacketAt: lastPacketAt
-                ? new Date(lastPacketAt).toISOString()
-                : null,
-
-            receiveDurationMs:
-                firstPacketAt && lastPacketAt
-                    ? lastPacketAt - firstPacketAt
-                    : 0,
-
-            packets: packetsOfFinishedWindow,
-
-            groupedPackets: {
-                type5: groupedType5,
-                type6: groupedType6,
-            },
-        };
-
-        console.log("========== TỔNG HỢP BLE SAU 30 GIÂY ==========");
-        console.log("THIẾT BỊ:", summary.device);
-        console.log("TỔNG GÓI NHẬN:", summary.packetCount);
-        console.log("THỜI GIAN THU:", summary.collectWindowMs, "ms");
-        console.log(
-            "THỜI GIAN TỪ GÓI ĐẦU ĐẾN GÓI CUỐI:",
-            summary.receiveDurationMs,
-            "ms"
+        logBleTypeCollectionSummary(
+            packetsOfFinishedBatch,
+            groupedType5
         );
-        console.log("================================================");
 
-        logGroupedPacketSummary("GÓI LOẠI 5", groupedType5);
-        logGroupedPacketSummary("GÓI LOẠI 6", groupedType6);
+        logBleTypeCollectionSummary(
+            packetsOfFinishedBatch,
+            groupedType6
+        );
 
-        console.log("========== TYPE 6 MINI GROUPS ==========");
-        console.log(type6MiniGroups);
-        console.log("========================================");
+        appendType5MiniGroupsAndBuildWindows(type5MiniGroups);
+        appendType6MiniGroupsAndBuildWindows(type6MiniGroups);
 
-        /**
-         * Từ các mini group type 6:
-         * - tạo window 1500 dữ liệu
-         * - đưa vào queue xử lý tuần tự
-         */
-        appendType6MiniGroupsAndProcessWindows(type6MiniGroups);
+        pairType5AndType6WindowsForModel();
 
-        /**
-         * Nếu dùng DEMO:
-         * Sau khi mở cửa sổ mới ở đầu hàm,
-         * phát tiếp session demo kế tiếp vào cửa sổ mới đó.
-         */
-        if (USE_DEMO_BLE_DATA) {
-            runSelectedDemoBlePacketSession();
+        scheduleNextDemoBatchFromBatchStart(activeBatch.startedAtMs);
+    };
+
+    /**
+     * Bắt đầu batch mới tại thời điểm nhận packet đầu tiên của packetId đó.
+     */
+    const startPacketBatchFromFirstPacket = (
+        packetId: number,
+        firstPacket: BlePacketItem,
+        startedAtMs: number
+    ) => {
+        const newBatch = createBleTrackedBatch(
+            packetId,
+            firstPacket,
+            startedAtMs
+        );
+
+        activePacketBatchRef.current = newBatch;
+
+        activeBatchTimeoutRef.current = setTimeout(() => {
+            finalizeActivePacketBatch("timeout");
+        }, BLE_COLLECTION_WINDOW_MS);
+
+        const completeness = getBleTrackedBatchCompleteness(newBatch);
+
+        if (completeness.isComplete) {
+            finalizeActivePacketBatch("complete");
+        }
+    };
+
+    /**
+     * Thêm packet vào batch active.
+     * Nếu đủ index type 5/type 6 thì batch hoàn tất ngay.
+     */
+    const appendPacketToActiveBatch = (packet: BlePacketItem) => {
+        const activeBatch = activePacketBatchRef.current;
+
+        if (!activeBatch) {
+            return;
         }
 
-        /**
-         * Không disconnect.
-         * Không reset lại lần nữa.
-         * Buffer cũ đã được tách snapshot,
-         * buffer mới đang tiếp tục nhận dữ liệu.
-         */
+        appendPacketToBleTrackedBatch(activeBatch, packet);
+
+        const completeness = getBleTrackedBatchCompleteness(activeBatch);
+
+        if (completeness.isComplete) {
+            finalizeActivePacketBatch("complete");
+        }
     };
 
-    const startBlePacketCollection = () => {
-        resetBlePacketCollection();
-
-        const startAt = Date.now();
-        bleCollectStartAtRef.current = startAt;
-
-        // console.log("BẮT ĐẦU THU BLE:", new Date(startAt).toISOString());
-
-        bleCollectionTimeoutRef.current = setTimeout(() => {
-            void finishBlePacketCollection();
-        }, BLE_COLLECTION_WINDOW_MS);
-    };
-
+    /**
+     * Điểm vào chung cho mọi packet:
+     * - DEMO
+     * - NOTIFY thật
+     * - READ_NOW thật
+     * - POLL thật
+     */
     const printData = async (
         source: string,
         serviceUUID: string,
@@ -399,40 +677,74 @@ export const useBleConnectDevice = () => {
         value: string
     ) => {
         const data = decodeBlePacket(value);
+        const packetId = data.header?.packetId.dec;
 
-        // console.log("BLE PACKET:", {
-        //     source,
-        //     packetType: data.header?.packetType.dec,
-        //     packetId: data.header?.packetId.dec,
-        //     packetIndex: data.header?.packetIndex.dec,
-        //     bufferLength: data.bufferLength,
-        // });
-
-        if (bleCollectStartAtRef.current === null) {
+        if (typeof packetId !== "number") {
             return;
         }
 
-        const receivedAt = Date.now();
+        const receivedAtMs = Date.now();
 
-        if (bleFirstPacketAtRef.current === null) {
-            bleFirstPacketAtRef.current = receivedAt;
+        /**
+         * Nếu batch trước đã COMPLETE và vẫn còn nằm trong chu kỳ 30 giây,
+         * packet cùng packetId xuất hiện muộn sẽ được coi là duplicate/trễ và bỏ qua.
+         */
+        const lastFinalizedBatch = lastFinalizedBatchRef.current;
+
+        if (
+            !activePacketBatchRef.current &&
+            lastFinalizedBatch &&
+            lastFinalizedBatch.packetId === packetId &&
+            receivedAtMs - lastFinalizedBatch.startedAtMs <
+            BLE_COLLECTION_WINDOW_MS
+        ) {
+            return;
         }
 
-        bleLastPacketAtRef.current = receivedAt;
-        blePacketIndexRef.current += 1;
+        /**
+         * Nếu packetId đổi trong lúc batch cũ chưa hoàn tất,
+         * chốt batch cũ INCOMPLETE rồi mở batch mới.
+         */
+        const currentActiveBatch = activePacketBatchRef.current;
 
-        blePacketsRef.current.push({
-            index: blePacketIndexRef.current,
+        if (
+            currentActiveBatch &&
+            currentActiveBatch.packetId !== packetId
+        ) {
+            finalizeActivePacketBatch("packet_id_changed");
+        }
+
+        const batchStartedAtMs =
+            activePacketBatchRef.current?.startedAtMs ?? receivedAtMs;
+
+        packetItemSequenceRef.current += 1;
+
+        const packetItem: BlePacketItem = {
+            index: packetItemSequenceRef.current,
             source,
             serviceUUID,
             charUUID,
-            receivedAt: new Date(receivedAt).toISOString(),
-            elapsedFromConnectMs:
-                receivedAt - bleCollectStartAtRef.current,
+            receivedAt: new Date(receivedAtMs).toISOString(),
+            elapsedFromConnectMs: receivedAtMs - batchStartedAtMs,
             data,
-        });
+        };
+
+        if (!activePacketBatchRef.current) {
+            startPacketBatchFromFirstPacket(
+                packetId,
+                packetItem,
+                receivedAtMs
+            );
+            return;
+        }
+
+        appendPacketToActiveBatch(packetItem);
     };
 
+    /**
+     * Phát 1 session demo vào luồng printData().
+     * Mỗi lần gọi sẽ lấy session kế tiếp.
+     */
     const runSelectedDemoBlePacketSession = () => {
         stopDemoBlePacketTimers(demoPacketTimersRef.current);
 
@@ -445,6 +757,9 @@ export const useBleConnectDevice = () => {
         demoSessionIndexRef.current += 1;
     };
 
+    /**
+     * Xin quyền BLE trên Android.
+     */
     const requestPermissions = async () => {
         if (Platform.OS !== "android") {
             return true;
@@ -472,6 +787,9 @@ export const useBleConnectDevice = () => {
         return locationPermission === PermissionsAndroid.RESULTS.GRANTED;
     };
 
+    /**
+     * Quét thiết bị BLE.
+     */
     const startScan = async () => {
         const granted = await requestPermissions();
 
@@ -499,7 +817,6 @@ export const useBleConnectDevice = () => {
             null,
             (error, device) => {
                 if (error) {
-                    console.log("SCAN ERROR:", error);
                     setScanning(false);
                     setStatus("Quét thiết bị thất bại");
                     return;
@@ -530,6 +847,12 @@ export const useBleConnectDevice = () => {
         }, BLE_SCAN_DURATION_MS);
     };
 
+    /**
+     * Nhận dữ liệu thật từ thiết bị BLE:
+     * - Subscribe notify/indicate
+     * - Read ngay 1 lần nếu characteristic readable
+     * - Poll readable characteristic mỗi 1 giây
+     */
     const startReceivingRealBleData = async (connected: Device) => {
         const services = await connected.services();
         const readableTargets: ReadTarget[] = [];
@@ -546,11 +869,6 @@ export const useBleConnectDevice = () => {
                         const subscription = characteristic.monitor(
                             (error, monitoredCharacteristic) => {
                                 if (error) {
-                                    console.log("NOTIFY ERROR:", {
-                                        serviceUUID: service.uuid,
-                                        charUUID: characteristic.uuid,
-                                        message: error.message,
-                                    });
                                     return;
                                 }
 
@@ -566,12 +884,7 @@ export const useBleConnectDevice = () => {
                         );
 
                         notifySubscriptionsRef.current.push(subscription);
-                    } catch (error) {
-                        console.log("SUBSCRIBE FAILED:", {
-                            serviceUUID: service.uuid,
-                            charUUID: characteristic.uuid,
-                            error,
-                        });
+                    } catch {
                     }
                 }
 
@@ -596,12 +909,7 @@ export const useBleConnectDevice = () => {
                                 readNow.value
                             );
                         }
-                    } catch (error) {
-                        console.log("READ NOW ERROR:", {
-                            serviceUUID: service.uuid,
-                            charUUID: characteristic.uuid,
-                            error,
-                        });
+                    } catch {
                     }
                 }
             }
@@ -639,11 +947,21 @@ export const useBleConnectDevice = () => {
         }
     };
 
+    /**
+     * Connect vào thiết bị người dùng chọn.
+     */
     const connectDevice = async (device: Device) => {
         try {
             stopAll();
             stopDemoBlePacketTimers(demoPacketTimersRef.current);
-            resetBlePacketCollection();
+
+            if (demoNextBatchTimerRef.current) {
+                clearTimeout(demoNextBatchTimerRef.current);
+                demoNextBatchTimerRef.current = null;
+            }
+
+            resetActivePacketBatch();
+            resetProcessingQueues();
 
             setScanModalVisible(false);
             setScanning(false);
@@ -657,35 +975,26 @@ export const useBleConnectDevice = () => {
             setConnectedDevice(connected);
             setStatus("Đã kết nối");
 
-            console.log("CONNECTED:", connected.name || connected.id);
-
-            startBlePacketCollection();
-
             if (USE_DEMO_BLE_DATA) {
-                console.log(
-                    "USE_DEMO_BLE_DATA = true → Dùng dữ liệu demo sau khi connect"
-                );
-
                 runSelectedDemoBlePacketSession();
                 return;
             }
 
-            console.log(
-                "USE_DEMO_BLE_DATA = false → Nhận dữ liệu thật từ thiết bị"
-            );
-
             await startReceivingRealBleData(connected);
-        } catch (error) {
-            console.log("CONNECT ERROR:", error);
+        } catch {
             setStatus("Kết nối thất bại");
         }
     };
 
+    /**
+     * Cleanup khi màn hình unmount.
+     */
     useEffect(() => {
         return () => {
             stopAll();
             stopDemoBlePacketTimers(demoPacketTimersRef.current);
-            resetBlePacketCollection();
+            resetActivePacketBatch();
+            resetProcessingQueues();
 
             if (deviceRef.current) {
                 void deviceRef.current.cancelConnection();

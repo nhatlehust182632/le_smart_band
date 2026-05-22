@@ -3,12 +3,43 @@ import type {
     GroupedPacketSummary,
 } from "../types/blePacket.types";
 
+const TYPE_5_VALUES_PER_FULL_PACKET = 83;
+const TYPE_5_VALUES_TO_KEEP_FROM_LAST_PACKET = 6;
+
+const uniqueNumberList = (values: number[]) => Array.from(new Set(values));
+
+type AxisValues = {
+    xValues: number[];
+    yValues: number[];
+    zValues: number[];
+};
+
 /**
- * Gom packet cùng loại:
- * - Lọc theo packetType
- * - Sắp xếp theo packetIndex
- * - Gộp payload.values thành 1 mảng liên tục
+ * Để log và summary phản ánh đúng dữ liệu sẽ đi vào model:
+ * - Packet type 5 index 1 -> 18: giữ 83 mẫu/trục.
+ * - Packet type 5 index 19: chỉ giữ 6 mẫu đầu/trục, bỏ 77 mẫu dư.
  */
+const getRetainedType5AxisValues = (
+    packet: BlePacketItem
+): AxisValues => {
+    const packetIndex = packet.data.header?.packetIndex.dec;
+
+    const rawXValues = packet.data.payload?.xValues ?? [];
+    const rawYValues = packet.data.payload?.yValues ?? [];
+    const rawZValues = packet.data.payload?.zValues ?? [];
+
+    const keepCount =
+        packetIndex === 19
+            ? TYPE_5_VALUES_TO_KEEP_FROM_LAST_PACKET
+            : TYPE_5_VALUES_PER_FULL_PACKET;
+
+    return {
+        xValues: rawXValues.slice(0, keepCount),
+        yValues: rawYValues.slice(0, keepCount),
+        zValues: rawZValues.slice(0, keepCount),
+    };
+};
+
 export const buildGroupedPacketSummary = (
     packets: BlePacketItem[],
     packetType: 5 | 6
@@ -25,13 +56,9 @@ export const buildGroupedPacketSummary = (
         .sort((a, b) => {
             const indexA = a.data.header?.packetIndex.dec ?? 0;
             const indexB = b.data.header?.packetIndex.dec ?? 0;
-
             return indexA - indexB;
         });
 
-    // =========================
-    // 1. Danh sách MAC xuất hiện
-    // =========================
     const macList = Array.from(
         new Set(
             filteredPackets
@@ -40,86 +67,74 @@ export const buildGroupedPacketSummary = (
         )
     );
 
-    // =========================
-    // 2. Danh sách packet ID
-    // =========================
-    const packetIdList = filteredPackets
-        .map((packet) => packet.data.header?.packetId.dec)
-        .filter((id): id is number => typeof id === "number");
+    const packetIdList = uniqueNumberList(
+        filteredPackets
+            .map((packet) => packet.data.header?.packetId.dec)
+            .filter((packetId): packetId is number => typeof packetId === "number")
+    );
 
-    // =========================
-    // 3. Danh sách packet index
-    // =========================
     const packetIndexList = filteredPackets
         .map((packet) => packet.data.header?.packetIndex.dec)
-        .filter((index): index is number => typeof index === "number");
+        .filter((packetIndex): packetIndex is number => typeof packetIndex === "number");
 
-    // =========================
-    // 4. Gộp dữ liệu của các packet cùng loại
-    // =========================
+    const totalPayloadByteLength = filteredPackets.reduce((sum, packet) => {
+        return sum + (packet.data.payload?.actualPayloadByteLength ?? 0);
+    }, 0);
+
+    if (packetType === 5) {
+        const retainedAxisValues = filteredPackets.map((packet) => {
+            return getRetainedType5AxisValues(packet);
+        });
+
+        const mergedXValues = retainedAxisValues.flatMap((values) => {
+            return values.xValues;
+        });
+
+        const mergedYValues = retainedAxisValues.flatMap((values) => {
+            return values.yValues;
+        });
+
+        const mergedZValues = retainedAxisValues.flatMap((values) => {
+            return values.zValues;
+        });
+
+        return {
+            packetType,
+            expectedPacketCount,
+            actualPacketCount: filteredPackets.length,
+            isEnoughPackets: filteredPackets.length === expectedPacketCount,
+
+            macList,
+            macCount: macList.length,
+            packetIdList,
+            packetIndexList,
+
+            totalDataCount: mergedXValues.length,
+            totalPayloadByteLength,
+            mergedXValues,
+            mergedYValues,
+            mergedZValues,
+        };
+    }
+
     const mergedValues = filteredPackets.flatMap((packet) => {
         const values = packet.data.payload?.values;
-
         return Array.isArray(values) ? values : [];
     });
 
-    // =========================
-    // 5. Tổng số byte payload của loại gói đó
-    // =========================
-    const totalPayloadByteLength = filteredPackets.reduce(
-        (sum, packet) => {
-            return (
-                sum +
-                (packet.data.payload?.actualPayloadByteLength ?? 0)
-            );
-        },
-        0
-    );
-
     return {
         packetType,
-
         expectedPacketCount,
         actualPacketCount: filteredPackets.length,
-        isEnoughPackets:
-            filteredPackets.length === expectedPacketCount,
+        isEnoughPackets: filteredPackets.length === expectedPacketCount,
 
         macList,
         macCount: macList.length,
-
         packetIdList,
         packetIndexList,
 
         totalDataCount: mergedValues.length,
         totalPayloadByteLength,
-
         mergedValues,
     };
-};
-
-/**
- * Log gọn phần tổng hợp của 1 loại gói.
- */
-export const logGroupedPacketSummary = (
-    title: string,
-    summary: GroupedPacketSummary
-) => {
-    console.log(`========== ${title} ==========`);
-
-    console.log("MAC LIST:", summary.macList);
-    console.log("SỐ MAC:", summary.macCount);
-
-    console.log("PACKET ID LIST:", summary.packetIdList);
-    console.log("PACKET INDEX LIST:", summary.packetIndexList);
-
-    console.log("SỐ GÓI NHẬN ĐƯỢC:", summary.actualPacketCount);
-    console.log("SỐ GÓI KỲ VỌNG:", summary.expectedPacketCount);
-    console.log("ĐỦ GÓI:", summary.isEnoughPackets);
-
-    console.log("TỔNG SỐ DỮ LIỆU:", summary.totalDataCount);
-    console.log("TỔNG BYTE PAYLOAD:", summary.totalPayloadByteLength);
-
-    console.log("DỮ LIỆU ĐÃ GỘP:", summary.mergedValues);
-
-    console.log("=================================");
 };

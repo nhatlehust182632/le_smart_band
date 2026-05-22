@@ -1,0 +1,22 @@
+{
+  "model": "TinyTCN base_ch=32 dilations=[1,2,4,8,16,32]",
+  "input_shape": [
+    2,
+    1500
+  ],
+  "ppg_key": "PPG_filt_Elgendi",
+  "acc_key": "ACC_raw_csv[:,1]",
+  "threshold_valid_best": 0.05,
+  "valid_metrics": {
+    "th": 0.05,
+    "sens": 0.9856115107890033,
+    "spec": 0.9842072015154869,
+    "f1": 0.9636576787807737
+  },
+  "test_metrics": {
+    "auc": 0.9990569440708224,
+    "f1": 0.9633136094674556,
+    "sens": 0.9878640776675052,
+    "spec": 0.9836272040296073
+  }
+}

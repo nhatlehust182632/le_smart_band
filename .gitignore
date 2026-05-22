@@ -41,3 +41,7 @@ app-example
 # generated native folders
 /ios
 /android
+model/venv_coreml/
+venv/
+.venv/
+__pycache__/

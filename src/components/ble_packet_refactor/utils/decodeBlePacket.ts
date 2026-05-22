@@ -5,24 +5,36 @@ import type {
 } from "../types/blePacket.types";
 
 /**
- * Decode 1 chuỗi Base64 BLE sang packet đã parse.
+ * Giải mã 1 packet BLE Base64.
  *
- * Frame đang dùng:
- * - 6 byte MAC
- * - 2 byte header 16 bit:
+ * Header chung:
+ * - 6 byte đầu: MAC address
+ * - 2 byte tiếp theo: header 16 bit
  *      [4 bit packetType][7 bit packetId][5 bit packetIndex]
- * - payload còn lại
+ *
+ * TYPE 5:
+ * - Có 19 packet.
+ * - Mọi packet, bao gồm packet index 19, đều:
+ *      8 byte header + 498 byte payload = 506 byte
+ *      498 / 6 = 83 mẫu x/y/z
+ * - Mỗi mẫu 6 byte:
+ *      2 byte x
+ *      2 byte y
+ *      2 byte z
+ *
+ * Lưu ý:
+ * - Hàm decode này vẫn parse đủ 83 mẫu cho packet index 19.
+ * - Việc bỏ 77 mẫu dư của packet index 19 được xử lý ở bước tổng hợp
+ *   trong `type5SlidingWindows.ts` và `summarizeBlePackets.ts`.
+ *
+ * TYPE 6:
+ * - 8 byte header + 500 byte payload = 508 byte
+ * - 500 / 4 = 125 giá trị
  */
 export const decodeBlePacket = (value: string): ParsedBlePacket => {
     const buffer = Buffer.from(value, "base64");
     const dec = Array.from(buffer);
 
-    // =========================
-    // 1. Kiểm tra packet tối thiểu
-    // =========================
-    // Cần ít nhất:
-    // - 6 byte MAC
-    // - 2 byte header
     if (buffer.length < 8) {
         return {
             isValid: false,
@@ -36,25 +48,17 @@ export const decodeBlePacket = (value: string): ParsedBlePacket => {
         };
     }
 
-    // =========================
-    // 2. 6 byte đầu là MAC
-    // =========================
     const macBytes = dec.slice(0, 6);
-
     const macAddress = macBytes
         .map((byte) => byte.toString(16).padStart(2, "0").toUpperCase())
         .join(":");
 
-    // =========================
-    // 3. 2 byte tiếp theo là header 16 bit
-    // =========================
     const headerByte1 = dec[6];
     const headerByte2 = dec[7];
 
     const header16 = (headerByte1 << 8) | headerByte2;
     const headerBits = header16.toString(2).padStart(16, "0");
 
-    // [4 bit type][7 bit id][5 bit index]
     const packetTypeBits = headerBits.slice(0, 4);
     const packetIdBits = headerBits.slice(4, 11);
     const packetIndexBits = headerBits.slice(11, 16);
@@ -63,18 +67,12 @@ export const decodeBlePacket = (value: string): ParsedBlePacket => {
     const packetId = parseInt(packetIdBits, 2);
     const packetIndex = parseInt(packetIndexBits, 2);
 
-    // =========================
-    // 4. Payload sau 8 byte đầu
-    // =========================
     const payloadBuffer = buffer.subarray(8);
     const payloadDec = Array.from(payloadBuffer);
 
     let parsedPayload: ParsedBlePayload;
 
     switch (packetType) {
-        // =========================
-        // Loại 1 -> 4: để xử lý sau
-        // =========================
         case 1:
         case 2:
         case 3:
@@ -86,26 +84,25 @@ export const decodeBlePacket = (value: string): ParsedBlePacket => {
             };
             break;
 
-        // =========================
-        // Loại 5
-        // - Payload = 500 byte
-        // - Mỗi dữ liệu = 6 byte
-        // - 500 / 6 = 83 dữ liệu, dư 2 byte
-        // =========================
         case 5: {
-            const TYPE_5_VALUE_SIZE = 6;
-            const values: number[] = [];
+            const TYPE_5_SAMPLE_SIZE = 6;
+
+            const xValues: number[] = [];
+            const yValues: number[] = [];
+            const zValues: number[] = [];
 
             let offset = 8;
 
-            while (offset + TYPE_5_VALUE_SIZE <= buffer.length) {
-                const intValue = buffer.readUIntBE(
-                    offset,
-                    TYPE_5_VALUE_SIZE
-                );
+            while (offset + TYPE_5_SAMPLE_SIZE <= buffer.length) {
+                const x = buffer.readUInt16BE(offset);
+                const y = buffer.readUInt16BE(offset + 2);
+                const z = buffer.readUInt16BE(offset + 4);
 
-                values.push(intValue);
-                offset += TYPE_5_VALUE_SIZE;
+                xValues.push(x);
+                yValues.push(y);
+                zValues.push(z);
+
+                offset += TYPE_5_SAMPLE_SIZE;
             }
 
             const remainingBytes = Array.from(buffer.subarray(offset));
@@ -113,12 +110,15 @@ export const decodeBlePacket = (value: string): ParsedBlePacket => {
             parsedPayload = {
                 packetName: "TYPE_5",
 
-                expectedPayloadByteLength: 500,
+                expectedPayloadByteLength: 498,
                 actualPayloadByteLength: payloadBuffer.length,
 
-                bytesPerValue: TYPE_5_VALUE_SIZE,
-                valueCount: values.length,
-                values,
+                bytesPerValue: TYPE_5_SAMPLE_SIZE,
+                valueCount: xValues.length,
+
+                xValues,
+                yValues,
+                zValues,
 
                 remainingByteCount: remainingBytes.length,
                 remainingBytes,
@@ -129,12 +129,6 @@ export const decodeBlePacket = (value: string): ParsedBlePacket => {
             break;
         }
 
-        // =========================
-        // Loại 6
-        // - Payload = 500 byte
-        // - Mỗi dữ liệu = 4 byte
-        // - 500 / 4 = 125 dữ liệu
-        // =========================
         case 6: {
             const TYPE_6_VALUE_SIZE = 4;
             const values: number[] = [];
@@ -143,7 +137,6 @@ export const decodeBlePacket = (value: string): ParsedBlePacket => {
 
             while (offset + TYPE_6_VALUE_SIZE <= buffer.length) {
                 const intValue = buffer.readUInt32BE(offset);
-
                 values.push(intValue);
                 offset += TYPE_6_VALUE_SIZE;
             }
@@ -169,9 +162,6 @@ export const decodeBlePacket = (value: string): ParsedBlePacket => {
             break;
         }
 
-        // =========================
-        // Loại khác
-        // =========================
         default:
             parsedPayload = {
                 status: "Loại gói không xác định",
@@ -181,9 +171,6 @@ export const decodeBlePacket = (value: string): ParsedBlePacket => {
             break;
     }
 
-    // =========================
-    // 5. Trả packet đã parse
-    // =========================
     return {
         isValid: true,
 

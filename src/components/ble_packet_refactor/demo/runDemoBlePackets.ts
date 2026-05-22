@@ -8,8 +8,7 @@ export type PrintBleDataFn = (
 ) => void | Promise<void>;
 
 /**
- * Dừng toàn bộ timer phát packet demo.
- * Dùng khi disconnect hoặc khi chạy lại session mới.
+ * Dừng toàn bộ timer đang phát packet demo.
  */
 export const stopDemoBlePacketTimers = (
     timers: ReturnType<typeof setTimeout>[]
@@ -19,10 +18,10 @@ export const stopDemoBlePacketTimers = (
 };
 
 /**
- * Phát 1 session demo.
+ * Phát 1 phiên dữ liệu demo.
  *
- * Mỗi packet Base64 được đẩy vào printData()
- * giống như dữ liệu thật từ BLE đi vào.
+ * File này không log để tránh làm rối console.
+ * Packet demo đi vào printData() giống packet BLE thật.
  */
 export const runDemoBlePacketSession = ({
     sessionIndex,
@@ -38,17 +37,9 @@ export const runDemoBlePacketSession = ({
         sessionIndex % DEMO_BLE_PACKET_SESSIONS.length
         ];
 
-    console.log("========== BẮT ĐẦU PHÁT DỮ LIỆU DEMO BLE ==========");
-    console.log("SESSION:", session.sessionNo);
-    console.log("MAC DEMO:", session.macAddress);
-    console.log("TỔNG GÓI:", session.totalPackets);
-    console.log("GÓI LOẠI 5:", session.type5PacketCount);
-    console.log("GÓI LOẠI 6:", session.type6PacketCount);
-    console.log("===================================================");
-
     session.packets.forEach((packet) => {
         const timer = setTimeout(() => {
-            printData(
+            void printData(
                 "DEMO",
                 "DEMO_SERVICE_UUID",
                 "DEMO_CHARACTERISTIC_UUID",
