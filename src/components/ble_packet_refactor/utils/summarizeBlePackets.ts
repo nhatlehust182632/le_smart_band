@@ -58,7 +58,6 @@ export const buildGroupedPacketSummary = (
             const indexB = b.data.header?.packetIndex.dec ?? 0;
             return indexA - indexB;
         });
-
     const macList = Array.from(
         new Set(
             filteredPackets

@@ -91,4 +91,34 @@ export const userApis: Record<string, ApiConfig> = {
     token: "USER_ACCESS_TOKEN",
     transformResponse: (data) => data?.data || data,
   },
+
+  getAtrialFibrillationWarningCount: {
+    name: "getAtrialFibrillationWarningCount",
+    baseUrl: ENV.USER_API_BASE_URL,
+    endpoint: "/api/user/atrialFibrillationWarnings",
+    method: "GET",
+    timeout: ENV.DEFAULT_TIMEOUT,
+    retries: 2,
+    authType: "bearer",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    token: "USER_ACCESS_TOKEN",
+    transformResponse: (data) => data?.data || data,
+  },
+
+  getDeviceDisconnectWarningCount: {
+    name: "getDeviceDisconnectWarningCount",
+    baseUrl: ENV.USER_API_BASE_URL,
+    endpoint: "/api/user/deviceDisconnectWarnings",
+    method: "GET",
+    timeout: ENV.DEFAULT_TIMEOUT,
+    retries: 2,
+    authType: "bearer",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    token: "USER_ACCESS_TOKEN",
+    transformResponse: (data) => data?.data || data,
+  },
 };

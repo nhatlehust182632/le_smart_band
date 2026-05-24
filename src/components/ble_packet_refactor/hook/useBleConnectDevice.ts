@@ -550,7 +550,6 @@ export const useBleConnectDevice = () => {
         if (!activeBatch) {
             return;
         }
-
         const completeness = getBleTrackedBatchCompleteness(activeBatch);
 
         if (activeBatchTimeoutRef.current) {
@@ -677,6 +676,16 @@ export const useBleConnectDevice = () => {
         value: string
     ) => {
         const data = decodeBlePacket(value);
+        console.log("[BLE DECODED]", {
+            source,
+            serviceUUID,
+            charUUID,
+            // rawValue: value,
+            bufferLength: data.bufferLength,
+            dec: data.dec,
+            hex: data.hex,
+            // decoded: data,
+        });
         const packetId = data.header?.packetId.dec;
 
         if (typeof packetId !== "number") {
@@ -753,7 +762,7 @@ export const useBleConnectDevice = () => {
             printData,
             timers: demoPacketTimersRef.current,
         });
-
+        console.log("timers", demoPacketTimersRef.current);
         demoSessionIndexRef.current += 1;
     };
 
@@ -856,7 +865,6 @@ export const useBleConnectDevice = () => {
     const startReceivingRealBleData = async (connected: Device) => {
         const services = await connected.services();
         const readableTargets: ReadTarget[] = [];
-
         for (const service of services) {
             const characteristics = await service.characteristics();
 
@@ -873,6 +881,13 @@ export const useBleConnectDevice = () => {
                                 }
 
                                 if (monitoredCharacteristic?.value) {
+                                    console.log("[BLE RECEIVE]", {
+                                        source: "NOTIFY",
+                                        serviceUUID: service.uuid,
+                                        charUUID: characteristic.uuid,
+                                        value: monitoredCharacteristic.value,
+                                    });
+
                                     void printData(
                                         "NOTIFY",
                                         service.uuid,
@@ -902,6 +917,13 @@ export const useBleConnectDevice = () => {
                             );
 
                         if (readNow?.value) {
+                            console.log("[BLE RECEIVE]", {
+                                source: "READ_NOW",
+                                serviceUUID: service.uuid,
+                                charUUID: characteristic.uuid,
+                                value: readNow.value,
+                            });
+
                             void printData(
                                 "READ_NOW",
                                 service.uuid,
@@ -932,6 +954,13 @@ export const useBleConnectDevice = () => {
                             );
 
                         if (characteristic?.value) {
+                            console.log("[BLE RECEIVE]", {
+                                source: "POLL",
+                                serviceUUID: target.serviceUUID,
+                                charUUID: target.charUUID,
+                                value: characteristic.value,
+                            });
+
                             void printData(
                                 "POLL",
                                 target.serviceUUID,
