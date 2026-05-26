@@ -2,8 +2,8 @@ import { ENV } from "../../constants/env";
 import { ApiConfig } from "../core/types";
 
 export const locationApis: Record<string, ApiConfig> = {
-    saveLocationPlaceNowApi: {
-        name: "saveLocationPlaceNowApi",
+    saveLocationPlaceNow: {
+        name: "saveLocationPlaceNow",
         baseUrl: ENV.USER_API_BASE_URL,
         endpoint: "/api/location/placeNow",
         method: "POST",

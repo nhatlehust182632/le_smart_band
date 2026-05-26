@@ -1,3 +1,4 @@
+import LoadingScreen from "@/components/LoadingScreen";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useState } from "react";
@@ -15,19 +16,26 @@ import { useAuth } from "../../context/AuthContext";
 
 export default function RegisterScreen() {
   const { register } = useAuth();
-
+  const [loading, setLoading] = useState(false);
   const [name, setName] = useState("hungtp");
   const [phone, setPhone] = useState("0378147307");
   const [password, setPassword] = useState("123456");
 
   const handleRegister = async () => {
     try {
+      setLoading(true);
       await register(name, phone, password);
       router.replace("../tabs");
     } catch (error: any) {
       Alert.alert("Đăng ký thất bại", error.message || "Có lỗi xảy ra");
+    } finally {
+      setLoading(false);
     }
   };
+
+  if (loading) {
+    return <LoadingScreen message="Đang đăng ký tài khoản..." />;
+  }
 
   return (
     <SafeAreaView style={styles.safe}>

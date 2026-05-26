@@ -1,10 +1,12 @@
+import { AddMonitorTab } from "@/components/monitor/AddMonitorTab";
+import { ConfirmMonitorTab } from "@/components/monitor/ConfirmMonitorTab";
+import { MonitoredTab } from "@/components/monitor/MonitoredTab";
 import { useAuth } from "@/context/AuthContext";
 import { monitorHook } from "@/hooks/monitor";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -12,97 +14,69 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView } from "react-native-safe-area-context";
 import { styles } from "../../../styles/appStyles";
 
-type HeartRate = {
-  id: string,
-  name: string,
-  age: string,
-  relation: string,
-  heartRate: string,
-  status: string,
-  isConnected: string,
-  location: string,
-};
-const monitoredPeople = [
-  {
-    id: "001",
-    name: "Nguyễn Văn Nam",
-    age: 67,
-    relation: "Cha",
-    heartRate: 148,
-    status: "Cảnh báo",
-    isConnected: true,
-    location: "Công viên Thống Nhất",
-  },
-  {
-    id: "002",
-    name: "Trần Thị Lan",
-    age: 63,
-    relation: "Mẹ",
-    heartRate: 78,
-    status: "Bình thường",
-    isConnected: true,
-    location: "Nhà riêng",
-  },
-  {
-    id: "003",
-    name: "Phạm Quốc Minh",
-    age: 72,
-    relation: "Bệnh nhân",
-    heartRate: 95,
-    status: "Theo dõi",
-    isConnected: false,
-    location: "Bệnh viện Bạch Mai",
-  },
-];
-
 export default function MonitorListScreen() {
-  const [loading, setLoading] = useState(false);
-  const [monitorFriend, setMonitorFriend] = useState<HeartRate[]>([]);
-  const {
-    getListMonitors
-  } = monitorHook();
+  const [activeTab, setActiveTab] = useState<"monitored" | "confirm" | "add">("monitored");
+  const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
+
   const { user } = useAuth();
+  const { getMonitorNotifications } = monitorHook();
 
-  const handleGetHeartRate = async () => {
-    if (loading) return;
+  const notificationInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastNotificationCountRef = useRef<number>(0);
+
+  const checkNotifications = async () => {
+    if (!user?.id) return;
     try {
-      setLoading(true);
-      const data = await getListMonitors(user?.id || "");
-      console.log("monitor: " + data);
+      const data = await getMonitorNotifications(user.id);
+      const notifications = Array.isArray(data) ? data : [];
+      const count = notifications.length;
 
-      setMonitorFriend(data);
+      if (count > 0 && count !== lastNotificationCountRef.current) {
+        lastNotificationCountRef.current = count;
+        const message = `Bạn có ${count} thông báo mới từ người được giám sát.`;
+        setNotificationMessage(message);
+        Alert.alert("Thông báo giám sát", message);
+      }
     } catch (error) {
-      console.log("Lỗi lấy nhịp tim:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getListFriend = async () => {
-    if (loading) return;
-    try {
-      // console.log("LOCATION PAYLOAD =>", payload);
-      // setLoading(true);
-      // const data = await savePlaceNow(payload);
-
-      // setDataLocation(data);
-
-      // const data1 = await getListHistory(user?.id || "");
-      // console.log("locationData: " + data1);
-      // setDataHistory(data1);
-    } catch (error) {
-      console.log("Save location error:", error);
-    } finally {
-      setLoading(false);
+      console.log("Lỗi kiểm tra thông báo giám sát:", error);
     }
   };
 
   useEffect(() => {
-    handleGetHeartRate();
-  }, [])
+    checkNotifications();
+
+    notificationInterval.current = setInterval(() => {
+      checkNotifications();
+    }, 10000);
+
+    return () => {
+      if (notificationInterval.current) {
+        clearInterval(notificationInterval.current);
+      }
+    };
+  }, [user?.id]);
+
+  const renderTabButton = (key: "monitored" | "confirm" | "add", label: string) => (
+    <TouchableOpacity
+      style={[
+        localStyles.tabButton,
+        activeTab === key && localStyles.tabButtonActive,
+      ]}
+      onPress={() => setActiveTab(key)}
+    >
+      <Text
+        style={[
+          localStyles.tabButtonText,
+          activeTab === key && localStyles.tabButtonTextActive,
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
 
   return (
     <SafeAreaView style={localStyles.safeOrange}>
@@ -112,83 +86,33 @@ export default function MonitorListScreen() {
           <LinearGradient colors={["#EF6C00", "#FB8C00"]} style={styles.header}>
             <View style={styles.centerHeader}>
               <Text style={styles.greeting}>Giám sát</Text>
-              <Text style={styles.subGreeting}>
-                Danh sách người đang được theo dõi
-              </Text>
+              <Text style={styles.subGreeting}>Quản lý giám sát và thông báo</Text>
             </View>
           </LinearGradient>
 
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Người được giám sát</Text>
+          <View style={localStyles.tabsRow}>
+            {renderTabButton("monitored", "Đang giám sát")}
+            {renderTabButton("confirm", "Xác nhận giám sát")}
+            {renderTabButton("add", "Thêm giám sát")}
           </View>
 
-          {monitorFriend?.map((person) => (
-            <TouchableOpacity
-              key={person.id}
-              style={localStyles.personCard}
-              onPress={() => router.push(`../tabs/monitor/${person.id}`)}
-            >
-              <View style={localStyles.avatarWrap}>
-                <Ionicons name="person" size={28} color="#EF6C00" />
-              </View>
+          {user?.id ? (
+            <View style={{ flex: 1 }}>
+              {activeTab === "monitored" && <MonitoredTab userId={user.id} />}
+              {activeTab === "confirm" && <ConfirmMonitorTab userId={user.id} />}
+              {activeTab === "add" && <AddMonitorTab userId={user.id} />}
+            </View>
+          ) : (
+            <View style={localStyles.emptyState}>
+              <Text style={localStyles.emptyText}>Vui lòng đăng nhập để xem thông tin giám sát.</Text>
+            </View>
+          )}
 
-              <View style={{ flex: 1 }}>
-                <Text style={localStyles.personName}>{person.name}</Text>
-                <Text style={localStyles.personMeta}>
-                  {person.relation} • {person.age} tuổi
-                </Text>
-
-                <View style={localStyles.inlineRow}>
-                  <MaterialCommunityIcons
-                    name="heart-pulse"
-                    size={16}
-                    color="#E53935"
-                  />
-                  <Text style={localStyles.inlineText}>
-                    {person.heartRate} BPM
-                  </Text>
-
-                  <Ionicons
-                    name={person.isConnected ? "bluetooth" : "alert-circle"}
-                    size={16}
-                    color={person.isConnected ? "#2E7D32" : "#D32F2F"}
-                    style={{ marginLeft: 14 }}
-                  />
-                  <Text style={localStyles.inlineText}>
-                    {person.isConnected ? "Đã kết nối" : "Mất kết nối"}
-                  </Text>
-                </View>
-
-                <Text style={localStyles.personLocation}>
-                  Vị trí: {person.location}
-                </Text>
-              </View>
-
-              <View
-                style={[
-                  localStyles.statusBadge,
-                  person.status === "Cảnh báo"
-                    ? localStyles.badgeDanger
-                    : person.status === "Theo dõi"
-                      ? localStyles.badgeWarning
-                      : localStyles.badgeSafe,
-                ]}
-              >
-                <Text
-                  style={[
-                    localStyles.statusBadgeText,
-                    person.status === "Cảnh báo"
-                      ? localStyles.badgeDangerText
-                      : person.status === "Theo dõi"
-                        ? localStyles.badgeWarningText
-                        : localStyles.badgeSafeText,
-                  ]}
-                >
-                  {person.status}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+          {notificationMessage ? (
+            <View style={localStyles.notificationBar}>
+              <Text style={localStyles.notificationText}>{notificationMessage}</Text>
+            </View>
+          ) : null}
 
           <View style={{ height: 24 }} />
         </ScrollView>
@@ -202,81 +126,51 @@ const localStyles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#EF6C00",
   },
-  personCard: {
-    backgroundColor: "#fff",
+  tabsRow: {
+    flexDirection: "row",
     marginHorizontal: 16,
-    marginTop: 14,
-    borderRadius: 20,
-    padding: 16,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  avatarWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
+    marginTop: 12,
+    borderRadius: 14,
     backgroundColor: "#FFF3E0",
+    padding: 6,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
     alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
   },
-  personName: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: "#1B2A41",
+  tabButtonActive: {
+    backgroundColor: "#FB8C00",
   },
-  personMeta: {
-    marginTop: 4,
+  tabButtonText: {
     fontSize: 13,
-    color: "#607D8B",
+    fontWeight: "700",
+    color: "#BF360C",
   },
-  inlineRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 10,
+  tabButtonTextActive: {
+    color: "#FFFFFF",
   },
-  inlineText: {
-    marginLeft: 6,
-    fontSize: 13,
-    color: "#455A64",
-    fontWeight: "600",
-  },
-  personLocation: {
-    marginTop: 8,
-    fontSize: 13,
-    color: "#607D8B",
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    marginLeft: 10,
-  },
-  badgeDanger: {
-    backgroundColor: "#FFEBEE",
-  },
-  badgeWarning: {
+  emptyState: {
+    marginHorizontal: 16,
+    marginTop: 20,
+    padding: 18,
+    borderRadius: 18,
     backgroundColor: "#FFF8E1",
   },
-  badgeSafe: {
-    backgroundColor: "#E8F5E9",
+  emptyText: {
+    color: "#795548",
+    fontSize: 14,
   },
-  statusBadgeText: {
-    fontSize: 12,
+  notificationBar: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: "#FFF3E0",
+  },
+  notificationText: {
+    color: "#BF360C",
     fontWeight: "700",
-  },
-  badgeDangerText: {
-    color: "#C62828",
-  },
-  badgeWarningText: {
-    color: "#EF6C00",
-  },
-  badgeSafeText: {
-    color: "#2E7D32",
   },
 });

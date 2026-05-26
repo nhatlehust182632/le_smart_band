@@ -1,7 +1,6 @@
-import { logger } from "../../utils/logger";
 import { apiRegistry } from "./apiRegistry";
 import { buildUrl } from "./buildUrl";
-import { fetchWithTimeout } from "./fetchWithTimeout";
+import { ApiTimeoutError, fetchWithTimeout } from "./fetchWithTimeout";
 import { CallApiOptions } from "./types";
 
 function sleep(ms: number) {
@@ -59,13 +58,13 @@ export async function callApi(apiName: string, options: CallApiOptions = {}) {
 
   let lastError: any;
 
-  logger.info("API Request", {
-    apiName,
-    method: config.method,
-    url,
-    query: mergedQuery,
-    pathParams: options.pathParams,
-  });
+  // logger.info("API Request", {
+  //   apiName,
+  //   method: config.method,
+  //   url,
+  //   query: mergedQuery,
+  //   pathParams: options.pathParams,
+  // });
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -79,38 +78,54 @@ export async function callApi(apiName: string, options: CallApiOptions = {}) {
         ? await response.json()
         : await response.text();
 
-      logger.info("API Response", {
-        apiName,
-        status: response.status,
-        duration: `${duration}ms`,
-      });
+      // logger.info("API Response", {
+      //   apiName,
+      //   status: response.status,
+      //   duration: `${duration}ms`,
+      // });
 
       if (!response.ok) {
-        throw new Error(
-          `API ${apiName} lỗi: ${response.status} - ${JSON.stringify(data)}`,
-        );
+        // throw new Error(
+        //   `${JSON.stringify(data.message || data)}`,
+        //   // `API ${apiName} lỗi: ${response.status} - ${JSON.stringify(data)}`,
+        // );
+        return;
       }
 
       return config.transformResponse ? config.transformResponse(data) : data;
     } catch (error) {
       lastError = error;
 
-      logger.error("API Error", {
-        apiName,
-        attempt: attempt + 1,
-        retries: retries + 1,
-        error,
-      });
+      const isTimeoutError = error instanceof ApiTimeoutError;
+      const isNetworkError =
+        error instanceof TypeError &&
+        error.message.toLowerCase().includes("network request failed");
+      const shouldRetry = isTimeoutError || isNetworkError;
 
-      if (attempt < retries) {
-        logger.warn("API Retry", {
-          apiName,
-          nextAttempt: attempt + 2,
-        });
+      // logger.error("API Error", {
+      //   apiName,
+      //   attempt: attempt + 1,
+      //   retries: retries + 1,
+      //   error,
+      // });
+
+      if (attempt < retries && shouldRetry) {
+        // logger.warn("API Retry", {
+        //   apiName,
+        //   nextAttempt: attempt + 2,
+        // });
 
         await sleep(1000 * (attempt + 1));
+        continue;
       }
+
+      break;
     }
+  }
+
+  if (lastError instanceof ApiTimeoutError) {
+    // throw new Error(`API ${apiName} timeout sau ${timeout}ms`);
+    return;
   }
 
   throw lastError;

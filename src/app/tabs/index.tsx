@@ -45,7 +45,7 @@ export default function HomeScreen() {
           <LinearGradient colors={["#0D47A1", "#1976D2"]} style={styles.header}>
             <View style={styles.headerTop}>
               <View>
-                <Text style={styles.greeting}>Xin chào, {user?.name}</Text>
+                <Text style={styles.greeting}>Xin chào, {user?.full_name}</Text>
                 <Text style={styles.subGreeting}>
                   Theo dõi sức khỏe mỗi ngày
                 </Text>
@@ -70,7 +70,6 @@ export default function HomeScreen() {
           <TodaySummarySection
             stepCount={summary.steps}
             calories={summary.calories}
-            todayWarnings={summary.todayWarnings}
           />
 
           <View style={{ height: 24 }} />

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+    AppState,
     PermissionsAndroid,
     Platform,
 } from "react-native";
@@ -27,6 +28,7 @@ import type {
     Type6SlidingWindow,
 } from "../types/blePacket.types";
 
+import { devicesSource } from "@/data-sources/devicesSource";
 import { decodeBlePacket } from "../utils/decodeBlePacket";
 
 import {
@@ -42,6 +44,10 @@ import {
     buildType6MiniGroupsFromPackets,
     createType6SlidingWindow,
 } from "../utils/type6SlidingWindows";
+
+import { heartRateSource } from "@/data-sources/heartRateSource";
+import { alertService } from "@/api/services/alert.service";
+import { calculateHeartRateFromType6 } from "../utils/sensorSignalProcessing";
 
 import {
     createSensorFusionModelInput,
@@ -82,7 +88,10 @@ import {
  *      - Ghép 4 mảng đầu vào model demo
  * 5. Model input chạy tuần tự, BLE vẫn tiếp tục nhận batch mới.
  */
-export const useBleConnectDevice = () => {
+export const useBleConnectDevice = (
+    autoConnectDeviceId?: string,
+    autoConnectUserId?: string
+) => {
     const bleManagerRef = useRef(new BleManager());
 
     const deviceRef = useRef<Device | null>(null);
@@ -101,6 +110,7 @@ export const useBleConnectDevice = () => {
         useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const demoSessionIndexRef = useRef(0);
+    const isAutoConnectingRef = useRef(false);
 
     /**
      * Batch đang được thu theo packetId.
@@ -154,6 +164,7 @@ export const useBleConnectDevice = () => {
 
     const sensorFusionModelInputCounterRef = useRef(0);
     const isProcessingSensorFusionQueueRef = useRef(false);
+    const lastAtrialNotificationAtRef = useRef(0);
 
     const [scanModalVisible, setScanModalVisible] = useState(false);
     const [devices, setDevices] = useState<Device[]>([]);
@@ -161,6 +172,13 @@ export const useBleConnectDevice = () => {
     const [status, setStatus] = useState("Chưa kết nối");
     const [connectedDevice, setConnectedDevice] =
         useState<Device | null>(null);
+
+    const currentUserIdRef = useRef<string | null>(null);
+    const connectedUserDeviceRef = useRef<{
+        user_device_id?: string;
+        device_id?: string;
+    } | null>(null);
+    const type6MacAddressRef = useRef<string | null>(null);
 
     /**
      * Reset batch packet đang active.
@@ -193,6 +211,7 @@ export const useBleConnectDevice = () => {
         isProcessingSensorFusionQueueRef.current = false;
 
         lastFinalizedBatchRef.current = null;
+        type6MacAddressRef.current = null;
     };
 
 
@@ -272,18 +291,18 @@ export const useBleConnectDevice = () => {
                     type6: groupedSummary.mergedValues?.length ?? 0,
                 };
 
-        console.log("[BLE TYPE SUMMARY]", {
-            type: groupedSummary.packetType,
-            mac: compactSingleOrList(groupedSummary.macList),
-            packetIds: compactSingleOrList(groupedSummary.packetIdList),
-            packetIndexes: groupedSummary.packetIndexList,
-            totalData,
-            receiveTime: {
-                firstReceivedAt,
-                lastReceivedAt,
-                receiveDurationMs,
-            },
-        });
+        // console.log("[BLE TYPE SUMMARY]", {
+        //     type: groupedSummary.packetType,
+        //     mac: compactSingleOrList(groupedSummary.macList),
+        //     packetIds: compactSingleOrList(groupedSummary.packetIdList),
+        //     packetIndexes: groupedSummary.packetIndexList,
+        //     totalData,
+        //     receiveTime: {
+        //         firstReceivedAt,
+        //         lastReceivedAt,
+        //         receiveDurationMs,
+        //     },
+        // });
     };
 
     /**
@@ -330,6 +349,9 @@ export const useBleConnectDevice = () => {
             resetActivePacketBatch();
             resetProcessingQueues();
 
+            currentUserIdRef.current = null;
+            connectedUserDeviceRef.current = null;
+
             if (deviceRef.current) {
                 await deviceRef.current.cancelConnection();
             }
@@ -338,6 +360,80 @@ export const useBleConnectDevice = () => {
             setConnectedDevice(null);
             setStatus("Đã ngắt kết nối");
         } catch {
+        }
+    };
+
+    const submitHeartRateActive = async (bpm: number) => {
+        const idUser = currentUserIdRef.current;
+
+        if (!idUser) {
+            return;
+        }
+
+        try {
+            const response = await heartRateSource.saveHeartRateActive(
+                idUser,
+                bpm,
+                type6MacAddressRef.current ?? undefined,
+                connectedUserDeviceRef.current?.device_id,
+            );
+
+            // console.log("[HEART RATE ACTIVE SAVED]", response);
+        } catch (error) {
+            console.warn("[HEART RATE ACTIVE SAVE FAILED]", error);
+        }
+    };
+
+    const notifyAtrialAlertInBackground = async (thresholdValue: number) => {
+        const appState = AppState.currentState;
+        if (appState === "active") {
+            return;
+        }
+
+        const now = Date.now();
+        if (now - lastAtrialNotificationAtRef.current < 30000) {
+            return;
+        }
+
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const Notifications = require("expo-notifications");
+
+            if (!Notifications?.scheduleNotificationAsync) {
+                return;
+            }
+
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: "Cảnh báo rung nhĩ",
+                    body: `Phát hiện chỉ số bất thường (${thresholdValue.toFixed(4)}). Vui lòng mở ứng dụng để kiểm tra.`,
+                    sound: "default",
+                },
+                trigger: null,
+            });
+
+            lastAtrialNotificationAtRef.current = now;
+        } catch (error) {
+            console.warn("[ATRIAL BACKGROUND NOTIFY FAILED]", error);
+        }
+    };
+
+    const submitAtrialAlertIfNeeded = async (modelProbability: number) => {
+        const userId = currentUserIdRef.current;
+
+        if (!userId) {
+            return;
+        }
+
+        if (modelProbability <= 0.05) {
+            return;
+        }
+
+        try {
+            await alertService.saveAtrialAlert(userId, modelProbability);
+            await notifyAtrialAlertInBackground(modelProbability);
+        } catch (error) {
+            console.warn("[ATRIAL ALERT SAVE FAILED]", error);
         }
     };
 
@@ -364,16 +460,15 @@ export const useBleConnectDevice = () => {
                 if (!modelInput) {
                     continue;
                 }
-
-                console.log("[MODEL INPUT SENT]", {
-                    modelCallCount: modelInput.modelInputNo,
-                    arrayLengths: {
-                        type6: modelInput.type6Values.length,
-                        type5x: modelInput.xValues.length,
-                        type5y: modelInput.yValues.length,
-                        type5z: modelInput.zValues.length,
-                    },
-                });
+                // console.log("[MODEL INPUT SENT]", {
+                //     modelCallCount: modelInput.modelInputNo,
+                //     arrayLengths: {
+                //         type6: modelInput.type6Values.length,
+                //         type5x: modelInput.xValues.length,
+                //         type5y: modelInput.yValues.length,
+                //         type5z: modelInput.zValues.length,
+                //     },
+                // });
 
                 /**
                  * Đây là vị trí duy nhất đưa 4 mảng vào hàm demo/model.
@@ -382,7 +477,19 @@ export const useBleConnectDevice = () => {
                  * processSensorFusionModelDemo(...)
                  * bằng model thật.
                  */
-                await processSensorFusionModelDemo(modelInput);
+                const modelProbability =
+                    await processSensorFusionModelDemo(modelInput);
+                await submitAtrialAlertIfNeeded(modelProbability);
+
+                if (modelInput.type6Values.length >= 1500) {
+                    const bpm = calculateHeartRateFromType6(
+                        modelInput.type6Values,
+                    );
+
+                    if (bpm !== null) {
+                        await submitHeartRateActive(bpm);
+                    }
+                }
 
 
 
@@ -565,19 +672,19 @@ export const useBleConnectDevice = () => {
             finalizedAtMs: Date.now(),
         };
 
-        console.log("[BLE BATCH STATUS]", {
-            packetId: activeBatch.packetId,
-            status: completeness.isComplete ? "COMPLETE" : "INCOMPLETE",
-            finalizeReason: reason,
-            totalPackets: activeBatch.packets.length,
-            type5MissingIndexes: completeness.type5.missingIndexes,
-            type6MissingIndexes: completeness.type6.missingIndexes,
-            firstReceivedAt: activeBatch.firstReceivedAt,
-            lastReceivedAt: activeBatch.lastReceivedAt,
-            durationMs:
-                new Date(activeBatch.lastReceivedAt).getTime() -
-                new Date(activeBatch.firstReceivedAt).getTime(),
-        });
+        // console.log("[BLE BATCH STATUS]", {
+        //     packetId: activeBatch.packetId,
+        //     status: completeness.isComplete ? "COMPLETE" : "INCOMPLETE",
+        //     finalizeReason: reason,
+        //     totalPackets: activeBatch.packets.length,
+        //     type5MissingIndexes: completeness.type5.missingIndexes,
+        //     type6MissingIndexes: completeness.type6.missingIndexes,
+        //     firstReceivedAt: activeBatch.firstReceivedAt,
+        //     lastReceivedAt: activeBatch.lastReceivedAt,
+        //     durationMs:
+        //         new Date(activeBatch.lastReceivedAt).getTime() -
+        //         new Date(activeBatch.firstReceivedAt).getTime(),
+        // });
 
         const packetsOfFinishedBatch = [...activeBatch.packets];
 
@@ -676,17 +783,21 @@ export const useBleConnectDevice = () => {
         value: string
     ) => {
         const data = decodeBlePacket(value);
-        console.log("[BLE DECODED]", {
-            source,
-            serviceUUID,
-            charUUID,
-            // rawValue: value,
-            bufferLength: data.bufferLength,
-            dec: data.dec,
-            hex: data.hex,
-            // decoded: data,
-        });
+        // console.log("[BLE DECODED]", {
+        //     source,
+        //     serviceUUID,
+        //     charUUID,
+        //     // rawValue: value,
+        //     bufferLength: data.bufferLength,
+        //     dec: data.dec,
+        //     hex: data.hex,
+        //     // decoded: data,
+        // });
         const packetId = data.header?.packetId.dec;
+
+        if (data.header?.packetType.dec === 6 && data.mac?.address) {
+            type6MacAddressRef.current = data.mac.address;
+        }
 
         if (typeof packetId !== "number") {
             return;
@@ -762,7 +873,7 @@ export const useBleConnectDevice = () => {
             printData,
             timers: demoPacketTimersRef.current,
         });
-        console.log("timers", demoPacketTimersRef.current);
+        // console.log("timers", demoPacketTimersRef.current);
         demoSessionIndexRef.current += 1;
     };
 
@@ -881,12 +992,12 @@ export const useBleConnectDevice = () => {
                                 }
 
                                 if (monitoredCharacteristic?.value) {
-                                    console.log("[BLE RECEIVE]", {
-                                        source: "NOTIFY",
-                                        serviceUUID: service.uuid,
-                                        charUUID: characteristic.uuid,
-                                        value: monitoredCharacteristic.value,
-                                    });
+                                    // console.log("[BLE RECEIVE]", {
+                                    //     source: "NOTIFY",
+                                    //     serviceUUID: service.uuid,
+                                    //     charUUID: characteristic.uuid,
+                                    //     value: monitoredCharacteristic.value,
+                                    // });
 
                                     void printData(
                                         "NOTIFY",
@@ -917,12 +1028,12 @@ export const useBleConnectDevice = () => {
                             );
 
                         if (readNow?.value) {
-                            console.log("[BLE RECEIVE]", {
-                                source: "READ_NOW",
-                                serviceUUID: service.uuid,
-                                charUUID: characteristic.uuid,
-                                value: readNow.value,
-                            });
+                            // console.log("[BLE RECEIVE]", {
+                            //     source: "READ_NOW",
+                            //     serviceUUID: service.uuid,
+                            //     charUUID: characteristic.uuid,
+                            //     value: readNow.value,
+                            // });
 
                             void printData(
                                 "READ_NOW",
@@ -954,12 +1065,12 @@ export const useBleConnectDevice = () => {
                             );
 
                         if (characteristic?.value) {
-                            console.log("[BLE RECEIVE]", {
-                                source: "POLL",
-                                serviceUUID: target.serviceUUID,
-                                charUUID: target.charUUID,
-                                value: characteristic.value,
-                            });
+                            // console.log("[BLE RECEIVE]", {
+                            //     source: "POLL",
+                            //     serviceUUID: target.serviceUUID,
+                            //     charUUID: target.charUUID,
+                            //     value: characteristic.value,
+                            // });
 
                             void printData(
                                 "POLL",
@@ -979,7 +1090,52 @@ export const useBleConnectDevice = () => {
     /**
      * Connect vào thiết bị người dùng chọn.
      */
-    const connectDevice = async (device: Device) => {
+    const finalizeConnectedDevice = async (
+        connected: Device,
+        userId?: string
+    ) => {
+        await connected.discoverAllServicesAndCharacteristics();
+
+        setConnectedDevice(connected);
+        setStatus("Đã kết nối");
+
+        currentUserIdRef.current = userId ?? null;
+        connectedUserDeviceRef.current = null;
+
+        if (userId) {
+            const idDevices = connected.id;
+            const nameDevice = connected.name ?? undefined;
+
+            try {
+                const savedData = await devicesSource.saveDevicesWithUser(
+                    idDevices,
+                    userId,
+                    nameDevice,
+                );
+
+                // console.log("[BLE DEVICE SAVED]", savedData);
+
+                const saved = savedData as any;
+                connectedUserDeviceRef.current = {
+                    user_device_id:
+                        saved?.user_device_id ?? saved?.id ?? undefined,
+                    device_id:
+                        saved?.device_id ?? saved?.deviceId ?? idDevices,
+                };
+            } catch (error) {
+                console.warn("[BLE DEVICE SAVE FAILED]", error);
+            }
+        }
+
+        if (USE_DEMO_BLE_DATA) {
+            runSelectedDemoBlePacketSession();
+            return;
+        }
+
+        await startReceivingRealBleData(connected);
+    };
+
+    const connectDevice = async (device: Device, userId?: string) => {
         try {
             stopAll();
             stopDemoBlePacketTimers(demoPacketTimersRef.current);
@@ -999,19 +1155,43 @@ export const useBleConnectDevice = () => {
             const connected = await device.connect();
             deviceRef.current = connected;
 
-            await connected.discoverAllServicesAndCharacteristics();
-
-            setConnectedDevice(connected);
-            setStatus("Đã kết nối");
-
-            if (USE_DEMO_BLE_DATA) {
-                runSelectedDemoBlePacketSession();
-                return;
-            }
-
-            await startReceivingRealBleData(connected);
+            await finalizeConnectedDevice(connected, userId);
         } catch {
             setStatus("Kết nối thất bại");
+        }
+    };
+
+    const connectDeviceById = async (deviceId: string, userId?: string) => {
+        if (isAutoConnectingRef.current) {
+            return;
+        }
+
+        isAutoConnectingRef.current = true;
+
+        try {
+            stopAll();
+            stopDemoBlePacketTimers(demoPacketTimersRef.current);
+
+            if (demoNextBatchTimerRef.current) {
+                clearTimeout(demoNextBatchTimerRef.current);
+                demoNextBatchTimerRef.current = null;
+            }
+
+            resetActivePacketBatch();
+            resetProcessingQueues();
+
+            setScanModalVisible(false);
+            setScanning(false);
+            setStatus("Đang kết nối...");
+
+            const connected = await bleManagerRef.current.connectToDevice(deviceId);
+            deviceRef.current = connected;
+
+            await finalizeConnectedDevice(connected, userId);
+        } catch {
+            setStatus("Kết nối thất bại");
+        } finally {
+            isAutoConnectingRef.current = false;
         }
     };
 
@@ -1033,6 +1213,21 @@ export const useBleConnectDevice = () => {
         };
     }, []);
 
+    useEffect(() => {
+        // console.log("autoConnectDeviceId", autoConnectDeviceId);
+        // console.log("connectedDevice", connectedDevice);
+        // console.log("scanning", scanning);
+        // console.log("isAutoConnecting", isAutoConnectingRef.current);
+        if (
+            autoConnectDeviceId &&
+            !connectedDevice &&
+            !scanning &&
+            !isAutoConnectingRef.current
+        ) {
+            void connectDeviceById(autoConnectDeviceId, autoConnectUserId);
+        }
+    }, [autoConnectDeviceId, autoConnectUserId, connectedDevice, scanning]);
+
     return {
         scanModalVisible,
         setScanModalVisible,
@@ -1043,6 +1238,7 @@ export const useBleConnectDevice = () => {
 
         startScan,
         connectDevice,
+        connectDeviceById,
         disconnect,
     };
 };

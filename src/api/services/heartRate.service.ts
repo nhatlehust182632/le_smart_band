@@ -10,4 +10,17 @@ export const heartRateSourceUser = {
   getHeartRateSourceHistory(id: string) {
     return heartRateSource.getHeartRateHistory(id);
   },
+  saveHeartRateActive(
+    idUser: string,
+    bpm: number,
+    macAddress?: string,
+    deviceId?: string
+  ) {
+    return heartRateSource.saveHeartRateActive(
+      idUser,
+      bpm,
+      macAddress,
+      deviceId,
+    );
+  },
 };

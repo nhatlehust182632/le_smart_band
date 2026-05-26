@@ -1,3 +1,4 @@
+import { useAuth } from "@/context/AuthContext";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { forwardRef, useImperativeHandle } from "react";
 import {
@@ -17,6 +18,7 @@ export type ConnectDeviceSectionRef = {
 
 export const ConnectDeviceSection = forwardRef<ConnectDeviceSectionRef>(
   function ConnectDeviceSection(_, ref) {
+    const { user } = useAuth();
     const {
       scanModalVisible,
       setScanModalVisible,
@@ -26,8 +28,9 @@ export const ConnectDeviceSection = forwardRef<ConnectDeviceSectionRef>(
       connectedDevice,
       startScan,
       connectDevice,
+      connectDeviceById,
       disconnect,
-    } = useBleConnectDevice();
+    } = useBleConnectDevice(user?.device_id, user?.id);
     const handleConnectionAction =
       connectedDevice === null ? startScan : disconnect;
 
@@ -110,7 +113,7 @@ export const ConnectDeviceSection = forwardRef<ConnectDeviceSectionRef>(
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={localStyles.deviceItemBLE}
-                    onPress={() => connectDevice(item)}
+                    onPress={() => connectDevice(item, user?.id)}
                   >
                     <Text style={localStyles.deviceName}>
                       {item.name || "Unknown Device"}

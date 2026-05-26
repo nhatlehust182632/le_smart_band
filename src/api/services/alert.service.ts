@@ -18,4 +18,21 @@ export const alertService = {
             },
         });
     },
+
+    saveAtrialAlert(userId: string, thresholdValue: number) {
+        return callApi("saveAtrialAlert", {
+            body: {
+                user_id: userId,
+                threshold_value: thresholdValue,
+            },
+        });
+    },
+
+    getAtrialAlertCount(id: string) {
+        return callApi("getAtrialAlertCount", {
+            query: {
+                id,
+            },
+        });
+    },
 };

@@ -22,7 +22,6 @@ import { styles } from "../../styles/appStyles";
 
 export default function TestConnectDeviceScreen() {
     const { user } = useAuth();
-
     const {
         scanModalVisible,
         setScanModalVisible,
@@ -33,7 +32,7 @@ export default function TestConnectDeviceScreen() {
         startScan,
         connectDevice,
         disconnect,
-    } = useBleConnectDevice();
+    } = useBleConnectDevice(user?.device_id, user?.id);
 
     return (
         <SafeAreaView style={localStyles.safeBlue}>
@@ -48,7 +47,7 @@ export default function TestConnectDeviceScreen() {
                         <View style={styles.headerTop}>
                             <View>
                                 <Text style={styles.greeting}>
-                                    Xin chào, {user?.name}
+                                    Xin chào, {user?.full_name}
                                 </Text>
 
                                 <Text style={styles.subGreeting}>
@@ -152,7 +151,7 @@ export default function TestConnectDeviceScreen() {
                                 renderItem={({ item }) => (
                                     <TouchableOpacity
                                         style={localStyles.deviceItemBLE}
-                                        onPress={() => connectDevice(item)}
+                                        onPress={() => connectDevice(item, user?.id)}
                                     >
                                         <Text style={localStyles.deviceItemName}>
                                             {item.name || "Unknown Device"}

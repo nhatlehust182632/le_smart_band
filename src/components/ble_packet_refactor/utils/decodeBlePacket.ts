@@ -33,6 +33,7 @@ import type {
  */
 export const decodeBlePacket = (value: string): ParsedBlePacket => {
     const buffer = Buffer.from(value, "base64");
+    console.log("Decoded Buffer:", buffer);
     const dec = Array.from(buffer);
 
     if (buffer.length < 8) {

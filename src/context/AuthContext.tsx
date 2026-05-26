@@ -4,8 +4,9 @@ import React, { createContext, useContext, useMemo, useState } from "react";
 
 type User = {
   id: string;
-  name?: string;
-  device_code?: string;
+  full_name?: string;
+  device_id?: string;
+  device_name?: string;
 };
 
 type AuthContextType = {
@@ -30,12 +31,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password_hash: password,
       full_name: "",
     };
-    const data = await userService.postUserLogin(userLogin);
+    const data = (await userService.postUserLogin(userLogin)) as any;
     console.log("Login User:", data);
     setUser({
       id: data?.id,
-      name: data?.full_name,
-      device_code: data?.device_code,
+      full_name: data?.full_name,
+      device_id: data?.device_id,
+      device_name: data?.device_name,
     });
   };
 
@@ -73,10 +75,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password_hash: password,
     };
     const data = await userService.postUserRegister(userRegister);
-    console.log("Register User:", data);
+    // console.log("Register User:", data);
+    console.log("Đăng ký thành công:", data);
     setUser({
       id: data?.id,
-      name: data?.full_name,
+      full_name: data?.full_name,
     });
   };
 

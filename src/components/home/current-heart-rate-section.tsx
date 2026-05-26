@@ -1,4 +1,5 @@
 import { heartRateHook } from "@/hooks/heartRate";
+import { alertService } from "@/api/services/alert.service";
 import { FontAwesome5, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -20,9 +21,11 @@ export function CurrentHeartRateSection({
   const getHeartRateRef = useRef(getInfoHeartRateByUser);
   const fetchingRef = useRef(false);
   const [heartRate, setHeartRate] = useState<HeartRate | null>(null);
+  const [atrialAlertCount, setAtrialAlertCount] = useState(0);
 
   const latestBpm = Number(heartRate?.latest_bpm ?? 0);
-  const isAbnormal = latestBpm > 120 || (latestBpm > 0 && latestBpm < 50);
+  const isAbnormal =
+    atrialAlertCount > 0 || latestBpm > 120 || (latestBpm > 0 && latestBpm < 50);
 
   useEffect(() => {
     getHeartRateRef.current = getInfoHeartRateByUser;
@@ -40,6 +43,12 @@ export function CurrentHeartRateSection({
         setHeartRate(data);
         onHeartRateChange(data);
       }
+
+      const countResp = await alertService.getAtrialAlertCount(userId);
+      const count = Number(
+        countResp?.count ?? countResp?.total ?? countResp?.warning_count ?? countResp ?? 0
+      );
+      setAtrialAlertCount(Number.isFinite(count) ? count : 0);
     } catch (error) {
       console.log("Lỗi lấy nhịp tim:", error);
     } finally {
@@ -106,7 +115,7 @@ export function CurrentHeartRateSection({
             <Ionicons name="warning" size={24} color="#D32F2F" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.alertTitle}>Cảnh báo dung nhĩ</Text>
+            <Text style={styles.alertTitle}>Cảnh báo rung nhĩ</Text>
             <Text style={styles.alertText}>
               Hệ thống AI phát hiện dấu hiệu nhịp tim bất thường. Hãy nghỉ
               ngơi và liên hệ người thân hoặc bác sĩ nếu cần.

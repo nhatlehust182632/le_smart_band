@@ -9,9 +9,22 @@ export const devicesSource = {
         return rawData;
     },
 
-    async saveDevicesWithUser(idDevices: string, idUser: string, nameDevice: string) {
+    async saveDevicesWithUser(
+        idDevices: string,
+        idUser: string,
+        nameDevice?: string
+    ) {
+        const body: { idDevices: string; userId: string; nameDevice?: string } = {
+            idDevices,
+            userId: idUser,
+        };
+
+        if (nameDevice) {
+            body.nameDevice = nameDevice;
+        }
+
         const rawData = await callApi("postSaveDevicesWithUser", {
-            body: { idDevices: idDevices, userId: idUser, nameDevice: nameDevice },
+            body,
         });
 
         return rawData;

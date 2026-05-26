@@ -24,4 +24,35 @@ export const heartRateSource = {
 
     return rawData;
   },
+
+  async saveHeartRateActive(
+    idUser: string,
+    bpm: number,
+    macAddress?: string,
+    idDevices?: string
+  ) {
+    const body: {
+      idUser: string;
+      bpm: number;
+      mac_address?: string;
+      idDevices?: string;
+    } = {
+      idUser,
+      bpm,
+    };
+
+    if (macAddress) {
+      body.mac_address = macAddress;
+    }
+
+    if (idDevices) {
+      body.idDevices = idDevices;
+    }
+    console.log("[HEART RATE SOURCE] Saving heart rate active with data:", body);
+    const rawData = await callApi("postSaveHeartRateActive", {
+      body,
+    });
+
+    return rawData;
+  },
 };

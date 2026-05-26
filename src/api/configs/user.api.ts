@@ -121,4 +121,34 @@ export const userApis: Record<string, ApiConfig> = {
     token: "USER_ACCESS_TOKEN",
     transformResponse: (data) => data?.data || data,
   },
+
+  saveAtrialAlert: {
+    name: "saveAtrialAlert",
+    baseUrl: ENV.USER_API_BASE_URL,
+    endpoint: "/api/atrial/saveAlert",
+    method: "POST",
+    timeout: ENV.DEFAULT_TIMEOUT,
+    retries: 1,
+    authType: "bearer",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    token: "USER_ACCESS_TOKEN",
+    transformResponse: (data) => data?.data || data,
+  },
+
+  getAtrialAlertCount: {
+    name: "getAtrialAlertCount",
+    baseUrl: ENV.USER_API_BASE_URL,
+    endpoint: "/api/atrial/count",
+    method: "GET",
+    timeout: ENV.DEFAULT_TIMEOUT,
+    retries: 1,
+    authType: "bearer",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    token: "USER_ACCESS_TOKEN",
+    transformResponse: (data) => data?.data || data,
+  },
 };

@@ -1,3 +1,6 @@
+import { stepService } from "@/api/services/step.service";
+import { alertService } from "@/api/services/alert.service";
+import { useAuth } from "@/context/AuthContext";
 import { Pedometer } from "expo-sensors";
 import { useCallback, useEffect, useState } from "react";
 
@@ -13,6 +16,8 @@ export function useDailyHealthSummary() {
         calories: 0,
         todayWarnings: 0,
     });
+
+    const { user } = useAuth();
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -43,13 +48,42 @@ export function useDailyHealthSummary() {
 
             const calories = Math.round(steps * 0.04);
 
-            const todayWarnings = 1;
+            let todayWarnings = 0;
+            if (user?.id) {
+                const countResp = await alertService.getAtrialAlertCount(user.id);
+                const count = Number(
+                    countResp?.count ??
+                    countResp?.total ??
+                    countResp?.warning_count ??
+                    countResp ??
+                    0
+                );
+                todayWarnings = Number.isFinite(count) ? count : 0;
+            }
 
             setSummary({
                 steps,
                 calories,
                 todayWarnings,
             });
+
+            // Gửi số bước lên server (định dạng theo locale vi-VN)
+            try {
+                const formatted = steps.toLocaleString("vi-VN");
+                if (user?.id) {
+                    void stepService
+                        .saveSteps(user.id, formatted)
+                        .catch((saveErr) => {
+                            console.warn(
+                                "Lỗi gửi bước chân lên server:",
+                                saveErr
+                            );
+                        });
+                }
+            } catch (e) {
+                // Không block luồng chính nếu gửi bị lỗi
+                console.warn("Lỗi gửi bước chân lên server:", e);
+            }
         } catch (err) {
             console.error("Lỗi lấy dữ liệu sức khỏe:", err);
 
@@ -61,7 +95,7 @@ export function useDailyHealthSummary() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [user?.id]);
 
     useEffect(() => {
         fetchDailySummary();

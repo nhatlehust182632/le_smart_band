@@ -71,4 +71,17 @@ export const healthApis: Record<string, ApiConfig> = {
     },
     transformResponse: (data) => data,
   },
+  postSaveSteps: {
+    name: "postSaveSteps",
+    baseUrl: ENV.HEALTH_API_BASE_URL,
+    endpoint: "/api/step/",
+    method: "POST",
+    timeout: 20000,
+    retries: 1,
+    authType: "bearer",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    transformResponse: (data) => data,
+  },
 };

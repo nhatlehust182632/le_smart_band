@@ -44,4 +44,18 @@ export const heartRateApi: Record<string, ApiConfig> = {
     token: "USER_ACCESS_TOKEN",
     transformResponse: (data) => data?.data || data,
   },
+  postSaveHeartRateActive: {
+    name: "postSaveHeartRateActive",
+    baseUrl: ENV.USER_API_BASE_URL,
+    endpoint: "/api/heartRate/saveHeartRateActive",
+    method: "POST",
+    timeout: ENV.DEFAULT_TIMEOUT,
+    retries: 2,
+    authType: "bearer",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    token: "USER_ACCESS_TOKEN",
+    transformResponse: (data) => data?.data || data,
+  },
 };
