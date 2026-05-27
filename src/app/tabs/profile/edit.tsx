@@ -17,7 +17,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { userApiSource } from "../../../data-sources/ApiSource/userApiSource";
+import { useProfileContext } from "./profile-context";
 import { styles } from "../../../styles/appStyles";
 
 export default function EditProfileScreen() {
@@ -32,12 +32,15 @@ export default function EditProfileScreen() {
   const [genderModalVisible, setGenderModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
+  const { profileDetail, refreshProfileData, saveProfileDetail } = useProfileContext();
 
   const handleGetInfo = async () => {
     if (loading) return;
     try {
       setLoading(true);
-      const data = await userApiSource.getInfoUserEdit(user?.id || "");
+      await refreshProfileData();
+      const data = profileDetail;
+      if (!data) return;
       setFullName(data?.full_name);
       setPhone(data?.phone);
       setEmergency_contact_name(data?.emergency_contact_name);
@@ -86,7 +89,7 @@ export default function EditProfileScreen() {
         emergency_contact_name: emergency_contact_name,
         emergency_contact_phone: emergency_contact_phone,
       };
-      const data = await userApiSource.postInfoUserSave(paramData);
+      const data = await saveProfileDetail(paramData);
       console.log("Profile: ", data);
       Alert.alert("Thành công", "Cập nhật thông tin thành công.");
       router.back();
@@ -98,8 +101,19 @@ export default function EditProfileScreen() {
   };
 
   useEffect(() => {
-    handleGetInfo();
-  }, []);
+    if (profileDetail) {
+      setFullName(profileDetail?.full_name ?? "");
+      setPhone(profileDetail?.phone ?? "");
+      setEmergency_contact_name(profileDetail?.emergency_contact_name ?? "");
+      setEmergency_contact_phone(profileDetail?.emergency_contact_phone ?? "");
+      setAge(profileDetail?.age + "" || "");
+      setHeight_cm(profileDetail?.height_cm + "" || "");
+      setWeight_kg(profileDetail?.weight_kg + "" || "");
+      setGender(profileDetail?.gender ?? "male");
+      return;
+    }
+    void handleGetInfo();
+  }, [profileDetail]);
 
   return (
     <SafeAreaView style={localStyles.safePurple}>

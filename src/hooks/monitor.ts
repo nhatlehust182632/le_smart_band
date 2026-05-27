@@ -41,7 +41,7 @@ export function monitorHook() {
         }
         try {
             setLoading(true);
-            const response = await monitorServices.getMonitorConfirmRequests(userId);
+            const response = await monitorServices.getPendingRequests(userId);
 
             return response;
         } finally {
@@ -56,7 +56,7 @@ export function monitorHook() {
         }
         try {
             setLoading(true);
-            const response = await monitorServices.getMonitorNotifications(userId);
+            const response = await monitorServices.getPendingRequests(userId);
 
             return response;
         } finally {
@@ -71,7 +71,7 @@ export function monitorHook() {
         }
         try {
             setLoading(true);
-            const response = await monitorServices.addMonitorByPhone(userId, phone);
+            const response = await monitorServices.sendFollowRequestByPhone(userId, phone);
 
             return response;
         } finally {
@@ -86,7 +86,7 @@ export function monitorHook() {
         }
         try {
             setLoading(true);
-            const response = await monitorServices.getUsersMonitoringMe(userId);
+            const response = await monitorServices.getFollowers(userId);
 
             return response;
         } finally {
@@ -101,7 +101,7 @@ export function monitorHook() {
         }
         try {
             setLoading(true);
-            const response = await monitorServices.stopMonitoring(userId, monitoredId);
+            const response = await monitorServices.approveRequest(userId, monitoredId);
 
             return response;
         } finally {
@@ -116,7 +116,22 @@ export function monitorHook() {
         }
         try {
             setLoading(true);
-            const response = await monitorServices.removeMonitorFromMe(userId, monitorId);
+            const response = await monitorServices.approveRequest(userId, monitorId);
+
+            return response;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const approveRequest = async (userId: string, requestId: string) => {
+        if (loading) return;
+        if (!userId || !requestId) {
+            throw new Error("Lỗi chức năng");
+        }
+        try {
+            setLoading(true);
+            const response = await monitorServices.approveRequest(userId, requestId);
 
             return response;
         } finally {
@@ -133,5 +148,6 @@ export function monitorHook() {
         getUsersMonitoringMe,
         stopMonitoring,
         removeMonitorFromMe,
+        approveRequest,
     };
 }

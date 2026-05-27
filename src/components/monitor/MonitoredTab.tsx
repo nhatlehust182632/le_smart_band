@@ -4,7 +4,6 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-    Alert,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -29,7 +28,7 @@ type MonitoredTabProps = {
 export function MonitoredTab({ userId }: MonitoredTabProps) {
     const [monitoredList, setMonitoredList] = useState<MonitorPerson[]>([]);
     const [loading, setLoading] = useState(false);
-    const { getListMonitors, stopMonitoring } = monitorHook();
+    const { getListMonitors } = monitorHook();
 
     const loadMonitoredList = async () => {
         if (loading) return;
@@ -42,31 +41,6 @@ export function MonitoredTab({ userId }: MonitoredTabProps) {
         } finally {
             setLoading(false);
         }
-    };
-
-    const handleStopMonitoring = async (personId: string) => {
-        Alert.alert(
-            "Xác nhận",
-            "Bạn có muốn bỏ giám sát người này không?",
-            [
-                { text: "Hủy", style: "cancel" },
-                {
-                    text: "Đồng ý",
-                    onPress: async () => {
-                        try {
-                            setLoading(true);
-                            await stopMonitoring(userId, personId);
-                            loadMonitoredList();
-                        } catch (error) {
-                            console.log("Lỗi bỏ giám sát:", error);
-                            Alert.alert("Lỗi", (error as Error)?.message || "Không thể bỏ giám sát.");
-                        } finally {
-                            setLoading(false);
-                        }
-                    },
-                },
-            ],
-        );
     };
 
     useEffect(() => {
@@ -110,12 +84,6 @@ export function MonitoredTab({ userId }: MonitoredTabProps) {
                             <Text style={localStyles.personLocation}>Vị trí: {person.location}</Text>
                         </View>
                         <View style={localStyles.actionsColumn}>
-                            <TouchableOpacity
-                                style={localStyles.stopButton}
-                                onPress={() => handleStopMonitoring(person.id)}
-                            >
-                                <Text style={localStyles.stopButtonText}>Bỏ giám sát</Text>
-                            </TouchableOpacity>
                             <TouchableOpacity
                                 style={localStyles.detailButton}
                                 onPress={() => router.push(`../tabs/monitor/${person.id}`)}
@@ -183,18 +151,6 @@ const localStyles = StyleSheet.create({
     actionsColumn: {
         alignItems: "flex-end",
         justifyContent: "space-between",
-    },
-    stopButton: {
-        backgroundColor: "#D32F2F",
-        borderRadius: 14,
-        paddingVertical: 8,
-        paddingHorizontal: 10,
-        marginBottom: 8,
-    },
-    stopButtonText: {
-        color: "#fff",
-        fontWeight: "700",
-        fontSize: 12,
     },
     detailButton: {
         backgroundColor: "#EF6C00",

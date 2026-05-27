@@ -32,7 +32,7 @@ export function ConfirmMonitorTab({ userId }: ConfirmMonitorTabProps) {
     const [confirmRequests, setConfirmRequests] = useState<ConfirmRequest[]>([]);
     const [watchers, setWatchers] = useState<Watcher[]>([]);
     const [loading, setLoading] = useState(false);
-    const { getConfirmRequests, getUsersMonitoringMe, removeMonitorFromMe } = monitorHook();
+    const { getConfirmRequests, getUsersMonitoringMe, approveRequest } = monitorHook();
 
     const loadConfirmData = async () => {
         if (loading) return;
@@ -51,10 +51,10 @@ export function ConfirmMonitorTab({ userId }: ConfirmMonitorTabProps) {
         }
     };
 
-    const handleRemoveWatcher = async (watcherId: string) => {
+    const handleApproveRequest = async (requestId: string) => {
         Alert.alert(
             "Xác nhận",
-            "Bạn có muốn hủy quyền giám sát của người này không?",
+            "Bạn có muốn đồng ý yêu cầu theo dõi này không?",
             [
                 { text: "Hủy", style: "cancel" },
                 {
@@ -62,11 +62,11 @@ export function ConfirmMonitorTab({ userId }: ConfirmMonitorTabProps) {
                     onPress: async () => {
                         try {
                             setLoading(true);
-                            await removeMonitorFromMe(userId, watcherId);
-                            loadConfirmData();
+                            await approveRequest(userId, requestId);
+                            await loadConfirmData();
                         } catch (error) {
-                            console.log("Lỗi hủy người giám sát:", error);
-                            Alert.alert("Lỗi", (error as Error)?.message || "Không thể hủy người giám sát.");
+                            console.log("Lỗi duyệt yêu cầu:", error);
+                            Alert.alert("Lỗi", (error as Error)?.message || "Không thể duyệt yêu cầu.");
                         } finally {
                             setLoading(false);
                         }
@@ -97,7 +97,15 @@ export function ConfirmMonitorTab({ userId }: ConfirmMonitorTabProps) {
                         <Text style={localStyles.personMeta}>{request.requesterPhone}</Text>
                         <View style={localStyles.requestInfoRow}>
                             <Text style={localStyles.requestStatus}>{request.status}</Text>
-                            <Text style={localStyles.requestDate}>{request.requestedAt}</Text>
+                            <View style={localStyles.actionRow}>
+                                <Text style={localStyles.requestDate}>{request.requestedAt}</Text>
+                                <TouchableOpacity
+                                    style={localStyles.approveButton}
+                                    onPress={() => handleApproveRequest(request.id)}
+                                >
+                                    <Text style={localStyles.approveButtonText}>Đồng ý</Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
                     </View>
                 ))
@@ -118,12 +126,6 @@ export function ConfirmMonitorTab({ userId }: ConfirmMonitorTabProps) {
                         <Text style={localStyles.personMeta}>{watcher.phone}</Text>
                         <View style={localStyles.requestInfoRow}>
                             <Text style={localStyles.requestDate}>Theo dõi từ {watcher.joinedAt}</Text>
-                            <TouchableOpacity
-                                style={localStyles.cancelButton}
-                                onPress={() => handleRemoveWatcher(watcher.id)}
-                            >
-                                <Text style={localStyles.cancelButtonText}>Hủy giám sát</Text>
-                            </TouchableOpacity>
                         </View>
                     </View>
                 ))
@@ -169,13 +171,18 @@ const localStyles = StyleSheet.create({
         color: "#607D8B",
         fontSize: 12,
     },
-    cancelButton: {
-        backgroundColor: "#D32F2F",
+    actionRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    approveButton: {
+        backgroundColor: "#2E7D32",
         borderRadius: 14,
         paddingVertical: 8,
         paddingHorizontal: 12,
     },
-    cancelButtonText: {
+    approveButtonText: {
         color: "#fff",
         fontWeight: "700",
         fontSize: 12,

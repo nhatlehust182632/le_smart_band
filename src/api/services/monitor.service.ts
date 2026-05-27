@@ -2,34 +2,30 @@ import { monitorSources } from "@/data-sources/monitorSource";
 
 export const monitorServices = {
     getListMonitorByUser(id: string) {
-        return monitorSources.getMonitorSourceByUser(id);
+        return monitorSources.getFollowing(id);
     },
 
     getMonitorIdDetailService(idMonitor: string) {
         return monitorSources.getMonitorIdDetailSoure(idMonitor);
     },
 
-    getMonitorConfirmRequests(userId: string) {
-        return monitorSources.getMonitorConfirmRequests(userId);
+    getPendingRequests(id: string) {
+        return monitorSources.getPendingRequests(id);
     },
 
-    getMonitorNotifications(userId: string) {
-        return monitorSources.getMonitorNotifications(userId);
+    getFollowing(id: string) {
+        return monitorSources.getFollowing(id);
     },
 
-    getUsersMonitoringMe(userId: string) {
-        return monitorSources.getUsersMonitoringMe(userId);
+    getFollowers(id: string) {
+        return monitorSources.getFollowers(id);
     },
 
-    stopMonitoring(userId: string, monitoredId: string) {
-        return monitorSources.stopMonitoring(userId, monitoredId);
+    approveRequest(id: string, requestId: string) {
+        return monitorSources.approveRequest(id, requestId);
     },
 
-    removeMonitorFromMe(userId: string, monitorId: string) {
-        return monitorSources.removeMonitorFromMe(userId, monitorId);
-    },
-
-    addMonitorByPhone(userId: string, phone: string) {
-        return monitorSources.addMonitorByPhone({ userId, phone });
+    sendFollowRequestByPhone(id: string, phone: string) {
+        return monitorSources.sendFollowRequestByPhone({ id, phone });
     },
 };

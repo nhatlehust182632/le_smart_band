@@ -17,48 +17,40 @@ export const monitorSources = {
         return rawData;
     },
 
-    async getMonitorConfirmRequests(userId: string) {
-        const rawData = await callApi("getMonitorConfirmRequests", {
-            query: { userId },
+    async getPendingRequests(id: string) {
+        const rawData = await callApi("getPendingRequests", {
+            query: { id },
         });
 
         return rawData;
     },
 
-    async getMonitorNotifications(userId: string) {
-        const rawData = await callApi("getMonitorNotifications", {
-            query: { userId },
+    async getFollowing(id: string) {
+        const rawData = await callApi("getFollowing", {
+            query: { id },
         });
 
         return rawData;
     },
 
-    async getUsersMonitoringMe(userId: string) {
-        const rawData = await callApi("getUsersMonitoringMe", {
-            query: { userId },
+    async getFollowers(id: string) {
+        const rawData = await callApi("getFollowers", {
+            query: { id },
         });
 
         return rawData;
     },
 
-    async stopMonitoring(userId: string, monitoredId: string) {
-        const rawData = await callApi("stopMonitoring", {
-            body: { userId, monitoredId },
+    async approveRequest(id: string, requestId: string) {
+        const rawData = await callApi("approveRequest", {
+            body: { id, request_id: requestId },
         });
 
         return rawData;
     },
 
-    async removeMonitorFromMe(userId: string, monitorId: string) {
-        const rawData = await callApi("removeMonitorFromMe", {
-            body: { userId, monitorId },
-        });
-
-        return rawData;
-    },
-
-    async addMonitorByPhone(payload: { userId: string; phone: string }) {
-        const rawData = await callApi("addMonitorByPhone", {
+    async sendFollowRequestByPhone(payload: { id: string; phone: string }) {
+        const rawData = await callApi("sendFollowRequestByPhone", {
             body: payload,
         });
 

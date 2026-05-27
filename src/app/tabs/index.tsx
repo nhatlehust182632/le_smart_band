@@ -16,7 +16,7 @@ import {
 import { CurrentHeartRateSection } from "../../components/home/current-heart-rate-section";
 import { CurrentLocationSection } from "../../components/home/current-location-section";
 import { MainActionsSection } from "../../components/home/main-actions-section";
-import { TodaySummarySection } from "../../components/home/today-summary-section";
+// import { TodaySummarySection } from "../../components/home/today-summary-section";
 import type { HeartRate } from "../../components/home/types";
 import { useDailyHealthSummary } from "../../hooks/useDailyHealthSummary";
 import { useLocationTracking } from "../../hooks/useLocationTracking";
@@ -67,10 +67,10 @@ export default function HomeScreen() {
             locationAddress={locationAddress}
           />
 
-          <TodaySummarySection
+          {/* <TodaySummarySection
             stepCount={summary.steps}
             calories={summary.calories}
-          />
+          /> */}
 
           <View style={{ height: 24 }} />
         </ScrollView>

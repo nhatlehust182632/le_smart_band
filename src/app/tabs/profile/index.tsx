@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from "../../../context/AuthContext";
-import { useProfile } from "../../../hooks/useProfile";
+import { useProfileContext } from "./profile-context";
 import { styles } from "../../../styles/appStyles";
 
 export default function ProfileScreen() {
@@ -25,15 +25,13 @@ export default function ProfileScreen() {
   const [heartAlert, setHeartAlert] = useState(true);
   const [gpsTracking, setGpsTracking] = useState(true);
   const { logout, user } = useAuth();
-  const { getInfoProfile } = useProfile();
+  const { profile, refreshProfileData } = useProfileContext();
 
   const handleGetProfile = async () => {
     if (loading) return;
     try {
       setLoading(true);
-      const data = await getInfoProfile(user?.id || "");
-      setData(data);
-      console.log("Profile: ", data);
+      await refreshProfileData();
     } catch (error: any) {
       Alert.alert("Đăng nhập thất bại", error.message || "Có lỗi xảy ra");
     } finally {
@@ -42,8 +40,14 @@ export default function ProfileScreen() {
   };
 
   useEffect(() => {
-    handleGetProfile();
-  }, []);
+    setData(profile);
+  }, [profile]);
+
+  useEffect(() => {
+    if (user?.id) {
+      void handleGetProfile();
+    }
+  }, [user?.id]);
 
   return (
     <SafeAreaView style={localStyles.safePurple}>

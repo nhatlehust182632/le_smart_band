@@ -31,10 +31,10 @@ export const monitorApiS: Record<string, ApiConfig> = {
         token: "USER_ACCESS_TOKEN",
         transformResponse: (data) => data?.data || data,
     },
-    getMonitorConfirmRequests: {
-        name: "getMonitorConfirmRequests",
+    getPendingRequests: {
+        name: "getPendingRequests",
         baseUrl: ENV.USER_API_BASE_URL,
-        endpoint: "/api/monitor/getConfirmRequests",
+        endpoint: "/api/monitor/pending-requests",
         method: "GET",
         timeout: ENV.DEFAULT_TIMEOUT,
         retries: 2,
@@ -45,10 +45,10 @@ export const monitorApiS: Record<string, ApiConfig> = {
         token: "USER_ACCESS_TOKEN",
         transformResponse: (data) => data?.data || data,
     },
-    getMonitorNotifications: {
-        name: "getMonitorNotifications",
+    getFollowing: {
+        name: "getFollowing",
         baseUrl: ENV.USER_API_BASE_URL,
-        endpoint: "/api/monitor/getMonitorNotifications",
+        endpoint: "/api/monitor/following",
         method: "GET",
         timeout: ENV.DEFAULT_TIMEOUT,
         retries: 2,
@@ -59,10 +59,10 @@ export const monitorApiS: Record<string, ApiConfig> = {
         token: "USER_ACCESS_TOKEN",
         transformResponse: (data) => data?.data || data,
     },
-    addMonitorByPhone: {
-        name: "addMonitorByPhone",
+    sendFollowRequestByPhone: {
+        name: "sendFollowRequestByPhone",
         baseUrl: ENV.USER_API_BASE_URL,
-        endpoint: "/api/monitor/addMonitorByPhone",
+        endpoint: "/api/monitor/request-by-phone",
         method: "POST",
         timeout: ENV.DEFAULT_TIMEOUT,
         retries: 2,
@@ -73,10 +73,10 @@ export const monitorApiS: Record<string, ApiConfig> = {
         token: "USER_ACCESS_TOKEN",
         transformResponse: (data) => data?.data || data,
     },
-    getUsersMonitoringMe: {
-        name: "getUsersMonitoringMe",
+    getFollowers: {
+        name: "getFollowers",
         baseUrl: ENV.USER_API_BASE_URL,
-        endpoint: "/api/monitor/getUsersMonitoringMe",
+        endpoint: "/api/monitor/followers",
         method: "GET",
         timeout: ENV.DEFAULT_TIMEOUT,
         retries: 2,
@@ -87,10 +87,10 @@ export const monitorApiS: Record<string, ApiConfig> = {
         token: "USER_ACCESS_TOKEN",
         transformResponse: (data) => data?.data || data,
     },
-    stopMonitoring: {
-        name: "stopMonitoring",
+    approveRequest: {
+        name: "approveRequest",
         baseUrl: ENV.USER_API_BASE_URL,
-        endpoint: "/api/monitor/stopMonitoring",
+        endpoint: "/api/monitor/approve-request",
         method: "POST",
         timeout: ENV.DEFAULT_TIMEOUT,
         retries: 2,
@@ -101,18 +101,4 @@ export const monitorApiS: Record<string, ApiConfig> = {
         token: "USER_ACCESS_TOKEN",
         transformResponse: (data) => data?.data || data,
     },
-    removeMonitorFromMe: {
-        name: "removeMonitorFromMe",
-        baseUrl: ENV.USER_API_BASE_URL,
-        endpoint: "/api/monitor/removeMonitorFromMe",
-        method: "POST",
-        timeout: ENV.DEFAULT_TIMEOUT,
-        retries: 2,
-        authType: "bearer",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        token: "USER_ACCESS_TOKEN",
-        transformResponse: (data) => data?.data || data,
-    }
 };
