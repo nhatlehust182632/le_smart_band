@@ -437,6 +437,7 @@ export const useBleConnectDevice = (
 
         try {
             await alertService.saveAtrialAlert(userId, modelProbability);
+            console.log("[ATRIAL ALERT SAVED]", modelProbability);
             await notifyAtrialAlertInBackground(modelProbability);
         } catch (error) {
             console.warn("[ATRIAL ALERT SAVE FAILED]", error);
@@ -466,15 +467,15 @@ export const useBleConnectDevice = (
                 if (!modelInput) {
                     continue;
                 }
-                // console.log("[MODEL INPUT SENT]", {
-                //     modelCallCount: modelInput.modelInputNo,
-                //     arrayLengths: {
-                //         type6: modelInput.type6Values.length,
-                //         type5x: modelInput.xValues.length,
-                //         type5y: modelInput.yValues.length,
-                //         type5z: modelInput.zValues.length,
-                //     },
-                // });
+                console.log("[MODEL INPUT SENT]", {
+                    modelCallCount: modelInput.modelInputNo,
+                    arrayLengths: {
+                        type6: modelInput.type6Values.length,
+                        type5x: modelInput.xValues.length,
+                        type5y: modelInput.yValues.length,
+                        type5z: modelInput.zValues.length,
+                    },
+                });
 
                 /**
                  * Đây là vị trí duy nhất đưa 4 mảng vào hàm demo/model.
@@ -678,19 +679,19 @@ export const useBleConnectDevice = (
             finalizedAtMs: Date.now(),
         };
 
-        // console.log("[BLE BATCH STATUS]", {
-        //     packetId: activeBatch.packetId,
-        //     status: completeness.isComplete ? "COMPLETE" : "INCOMPLETE",
-        //     finalizeReason: reason,
-        //     totalPackets: activeBatch.packets.length,
-        //     type5MissingIndexes: completeness.type5.missingIndexes,
-        //     type6MissingIndexes: completeness.type6.missingIndexes,
-        //     firstReceivedAt: activeBatch.firstReceivedAt,
-        //     lastReceivedAt: activeBatch.lastReceivedAt,
-        //     durationMs:
-        //         new Date(activeBatch.lastReceivedAt).getTime() -
-        //         new Date(activeBatch.firstReceivedAt).getTime(),
-        // });
+        console.log("[BLE BATCH STATUS]", {
+            packetId: activeBatch.packetId,
+            status: completeness.isComplete ? "COMPLETE" : "INCOMPLETE",
+            finalizeReason: reason,
+            totalPackets: activeBatch.packets.length,
+            type5MissingIndexes: completeness.type5.missingIndexes,
+            type6MissingIndexes: completeness.type6.missingIndexes,
+            firstReceivedAt: activeBatch.firstReceivedAt,
+            lastReceivedAt: activeBatch.lastReceivedAt,
+            durationMs:
+                new Date(activeBatch.lastReceivedAt).getTime() -
+                new Date(activeBatch.firstReceivedAt).getTime(),
+        });
 
         const packetsOfFinishedBatch = [...activeBatch.packets];
 
@@ -1007,7 +1008,6 @@ export const useBleConnectDevice = (
                                     //     charUUID: characteristic.uuid,
                                     //     value: monitoredCharacteristic.value,
                                     // });
-
                                     void printData(
                                         "NOTIFY",
                                         service.uuid,

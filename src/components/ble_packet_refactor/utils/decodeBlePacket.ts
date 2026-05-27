@@ -32,7 +32,7 @@ import type {
  * - 500 / 4 = 125 giá trị
  */
 export const decodeBlePacket = (value: string): ParsedBlePacket => {
-    console.log("Decoding Base64 value:", value);
+    // console.log("Decoding Base64 value:", value);
     const buffer = Buffer.from(value, "base64");
     // console.log("Decoded Buffer:", buffer);
     const dec = Array.from(buffer);
@@ -146,7 +146,7 @@ export const decodeBlePacket = (value: string): ParsedBlePacket => {
             }
 
             const remainingBytes = Array.from(buffer.subarray(offset));
-            // console.log("Parsed TYPE_6 values:", values);
+            // console.log("Parsed TYPE_6 values:", values);   
             parsedPayload = {
                 packetName: "TYPE_6",
 
