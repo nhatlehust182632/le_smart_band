@@ -1,6 +1,9 @@
 import { useAuth } from "@/context/AuthContext";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { forwardRef, useImperativeHandle } from "react";
+import {
+  Ionicons,
+  MaterialCommunityIcons,
+} from "@expo/vector-icons";
+import { forwardRef, useImperativeHandle } from "react";
 import {
   FlatList,
   Modal,

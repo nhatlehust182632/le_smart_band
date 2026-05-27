@@ -85,11 +85,10 @@ export async function callApi(apiName: string, options: CallApiOptions = {}) {
       // });
 
       if (!response.ok) {
-        // throw new Error(
-        //   `${JSON.stringify(data.message || data)}`,
-        //   // `API ${apiName} lỗi: ${response.status} - ${JSON.stringify(data)}`,
-        // );
-        return;
+        throw new Error(
+          `${JSON.stringify(data.message || data)}`,
+          // `API ${apiName} lỗi: ${response.status} - ${JSON.stringify(data)}`,
+        );
       }
 
       return config.transformResponse ? config.transformResponse(data) : data;
@@ -124,8 +123,7 @@ export async function callApi(apiName: string, options: CallApiOptions = {}) {
   }
 
   if (lastError instanceof ApiTimeoutError) {
-    // throw new Error(`API ${apiName} timeout sau ${timeout}ms`);
-    return;
+    throw new Error(`API ${apiName} timeout sau ${timeout}ms`);
   }
 
   throw lastError;

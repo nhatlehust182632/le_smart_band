@@ -45,8 +45,8 @@ import {
     createType6SlidingWindow,
 } from "../utils/type6SlidingWindows";
 
-import { heartRateSource } from "@/data-sources/heartRateSource";
 import { alertService } from "@/api/services/alert.service";
+import { heartRateSource } from "@/data-sources/heartRateSource";
 import { calculateHeartRateFromType6 } from "../utils/sensorSignalProcessing";
 
 import {
@@ -111,6 +111,9 @@ export const useBleConnectDevice = (
 
     const demoSessionIndexRef = useRef(0);
     const isAutoConnectingRef = useRef(false);
+    const userRequestedDisconnectRef = useRef(false);
+    const lastAutoConnectDeviceIdRef = useRef<string | undefined>(undefined);
+    const connectionActionIdRef = useRef(0);
 
     /**
      * Batch đang được thu theo packetId.
@@ -337,6 +340,9 @@ export const useBleConnectDevice = (
      * Ngắt kết nối BLE hoàn toàn.
      */
     const disconnect = async () => {
+        userRequestedDisconnectRef.current = true;
+        connectionActionIdRef.current += 1;
+
         try {
             stopAll();
             stopDemoBlePacketTimers(demoPacketTimersRef.current);
@@ -911,6 +917,9 @@ export const useBleConnectDevice = (
      * Quét thiết bị BLE.
      */
     const startScan = async () => {
+        userRequestedDisconnectRef.current = false;
+        connectionActionIdRef.current += 1;
+
         const granted = await requestPermissions();
 
         if (!granted) {
@@ -1136,6 +1145,9 @@ export const useBleConnectDevice = (
     };
 
     const connectDevice = async (device: Device, userId?: string) => {
+        userRequestedDisconnectRef.current = false;
+        const actionId = ++connectionActionIdRef.current;
+
         try {
             stopAll();
             stopDemoBlePacketTimers(demoPacketTimersRef.current);
@@ -1153,6 +1165,12 @@ export const useBleConnectDevice = (
             setStatus("Đang kết nối...");
 
             const connected = await device.connect();
+
+            if (userRequestedDisconnectRef.current || actionId !== connectionActionIdRef.current) {
+                await connected.cancelConnection();
+                return;
+            }
+
             deviceRef.current = connected;
 
             await finalizeConnectedDevice(connected, userId);
@@ -1167,6 +1185,7 @@ export const useBleConnectDevice = (
         }
 
         isAutoConnectingRef.current = true;
+        const actionId = ++connectionActionIdRef.current;
 
         try {
             stopAll();
@@ -1185,6 +1204,12 @@ export const useBleConnectDevice = (
             setStatus("Đang kết nối...");
 
             const connected = await bleManagerRef.current.connectToDevice(deviceId);
+
+            if (userRequestedDisconnectRef.current || actionId !== connectionActionIdRef.current) {
+                await connected.cancelConnection();
+                return;
+            }
+
             deviceRef.current = connected;
 
             await finalizeConnectedDevice(connected, userId);
@@ -1214,6 +1239,11 @@ export const useBleConnectDevice = (
     }, []);
 
     useEffect(() => {
+        if (lastAutoConnectDeviceIdRef.current !== autoConnectDeviceId) {
+            lastAutoConnectDeviceIdRef.current = autoConnectDeviceId;
+            userRequestedDisconnectRef.current = false;
+        }
+
         // console.log("autoConnectDeviceId", autoConnectDeviceId);
         // console.log("connectedDevice", connectedDevice);
         // console.log("scanning", scanning);
@@ -1222,7 +1252,8 @@ export const useBleConnectDevice = (
             autoConnectDeviceId &&
             !connectedDevice &&
             !scanning &&
-            !isAutoConnectingRef.current
+            !isAutoConnectingRef.current &&
+            !userRequestedDisconnectRef.current
         ) {
             void connectDeviceById(autoConnectDeviceId, autoConnectUserId);
         }

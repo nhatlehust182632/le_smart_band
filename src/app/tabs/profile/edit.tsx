@@ -17,7 +17,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useProfileContext } from "./profile-context";
+import { useProfileContext } from "../../../hooks/profile-context";
 import { styles } from "../../../styles/appStyles";
 
 export default function EditProfileScreen() {

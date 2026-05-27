@@ -19,7 +19,7 @@ export const monitorSources = {
 
     async getPendingRequests(id: string) {
         const rawData = await callApi("getPendingRequests", {
-            query: { id },
+            query: { idUser: id },
         });
 
         return rawData;
@@ -27,7 +27,7 @@ export const monitorSources = {
 
     async getFollowing(id: string) {
         const rawData = await callApi("getFollowing", {
-            query: { id },
+            query: { idUser: id },
         });
 
         return rawData;
@@ -35,7 +35,7 @@ export const monitorSources = {
 
     async getFollowers(id: string) {
         const rawData = await callApi("getFollowers", {
-            query: { id },
+            query: { idUser: id },
         });
 
         return rawData;
@@ -43,7 +43,10 @@ export const monitorSources = {
 
     async approveRequest(id: string, requestId: string) {
         const rawData = await callApi("approveRequest", {
-            body: { id, request_id: requestId },
+            body: {
+                idUser: id,
+                relationId: requestId,
+            },
         });
 
         return rawData;
@@ -51,10 +54,13 @@ export const monitorSources = {
 
     async sendFollowRequestByPhone(payload: { id: string; phone: string }) {
         const rawData = await callApi("sendFollowRequestByPhone", {
-            body: payload,
+            body: {
+                idUser: payload.id,
+                phone: payload.phone,
+            },
         });
 
         return rawData;
-    },
+    }
 
 };

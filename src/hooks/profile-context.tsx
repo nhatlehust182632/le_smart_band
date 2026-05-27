@@ -1,6 +1,6 @@
 import { Profile, User } from "@/api/models/user.model";
-import { userApiSource } from "@/data-sources/ApiSource/userApiSource";
 import { useAuth } from "@/context/AuthContext";
+import { userApiSource } from "@/data-sources/ApiSource/userApiSource";
 import React, {
   createContext,
   useCallback,

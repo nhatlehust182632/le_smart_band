@@ -1,10 +1,6 @@
 import { useAuth } from "@/context/AuthContext";
-import {
-    Ionicons,
-    MaterialCommunityIcons,
-} from "@expo/vector-icons";
+
 import { LinearGradient } from "expo-linear-gradient";
-import React from "react";
 import {
     FlatList,
     Modal,
@@ -16,6 +12,8 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Ionicons from "react-native-vector-icons/Ionicons";
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 import { useBleConnectDevice } from "../../components/ble_packet_refactor/hook/useBleConnectDevice";
 import { styles } from "../../styles/appStyles";
