@@ -16,6 +16,7 @@ export const locationApis: Record<string, ApiConfig> = {
         token: "USER_ACCESS_TOKEN",
         transformResponse: (data) => data?.data || data,
     },
+
     getListHistoryUser: {
         name: "getListHistoryUser",
         baseUrl: ENV.USER_API_BASE_URL,
@@ -29,5 +30,20 @@ export const locationApis: Record<string, ApiConfig> = {
         },
         token: "USER_ACCESS_TOKEN",
         transformResponse: (data) => data?.data || data,
-    }
+    },
+
+    getTopLocationUser: {
+        name: "getTopLocationUser",
+        baseUrl: ENV.USER_API_BASE_URL,
+        endpoint: "/api/location/getTopLocation",
+        method: "GET",
+        timeout: ENV.DEFAULT_TIMEOUT,
+        retries: 2,
+        authType: "bearer",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        token: "USER_ACCESS_TOKEN",
+        transformResponse: (data) => data?.data || data,
+    },
 };

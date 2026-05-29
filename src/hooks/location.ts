@@ -5,10 +5,10 @@ export function locationPlace() {
     const [loading, setLoading] = useState(false);
 
     const savePlaceNow = async (data: any) => {
-        if (loading) return;
         if (!data) {
             throw new Error("Lỗi chức năng");
         }
+
         try {
             setLoading(true);
             const response = await locationService.saveLocationPlace(data);
@@ -18,14 +18,31 @@ export function locationPlace() {
         }
     };
 
-    const getListHistory = async (id: string) => {
-        if (loading) return;
+    const getListHistory = async (id: string, days: number) => {
         if (!id) {
             throw new Error("Lỗi chức năng");
         }
+
         try {
             setLoading(true);
-            const response = await locationService.getHistoryData(id);
+            const response = await locationService.getHistoryData(id, days);
+
+            console.log("GET LIST HISTORY RESPONSE =>", response);
+
+            return response;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const getTopLocation = async (id: string, days: number) => {
+        if (!id) {
+            throw new Error("Lỗi chức năng");
+        }
+
+        try {
+            setLoading(true);
+            const response = await locationService.getTopLocationData(id, days);
 
             return response;
         } finally {
@@ -34,7 +51,9 @@ export function locationPlace() {
     };
 
     return {
+        loading,
         savePlaceNow,
-        getListHistory
+        getListHistory,
+        getTopLocation,
     };
 }

@@ -32,7 +32,7 @@ export function ConfirmMonitorTab({ userId }: ConfirmMonitorTabProps) {
     const [confirmRequests, setConfirmRequests] = useState<ConfirmRequest[]>([]);
     const [watchers, setWatchers] = useState<Watcher[]>([]);
     const [loading, setLoading] = useState(false);
-    const { getConfirmRequests, getUsersMonitoringMe, approveRequest } = monitorHook();
+    const { getConfirmRequests, getUsersMonitoringMe, approveRequest, removeMonitorFromMe } = monitorHook();
 
     const loadConfirmData = async () => {
         if (loading) return;
@@ -67,6 +67,32 @@ export function ConfirmMonitorTab({ userId }: ConfirmMonitorTabProps) {
                         } catch (error) {
                             console.log("Lỗi duyệt yêu cầu:", error);
                             Alert.alert("Lỗi", (error as Error)?.message || "Không thể duyệt yêu cầu.");
+                        } finally {
+                            setLoading(false);
+                        }
+                    },
+                },
+            ],
+        );
+    };
+
+    const handleRemoveMonitorFromMe = async (relationId: string) => {
+        Alert.alert(
+            "Xác nhận",
+            "Bạn có muốn hủy người này giám sát bạn không?",
+            [
+                { text: "Hủy", style: "cancel" },
+                {
+                    text: "Đồng ý",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            setLoading(true);
+                            await removeMonitorFromMe(userId, relationId);
+                            await loadConfirmData();
+                        } catch (error) {
+                            console.log("Lỗi hủy người giám sát:", error);
+                            Alert.alert("Lỗi", (error as Error)?.message || "Không thể hủy người giám sát.");
                         } finally {
                             setLoading(false);
                         }
@@ -121,12 +147,21 @@ export function ConfirmMonitorTab({ userId }: ConfirmMonitorTabProps) {
                 </View>
             ) : (
                 watchers.map((watcher) => (
-                    <View key={watcher.id} style={localStyles.requestCard}>
-                        <Text style={localStyles.personName}>{watcher.name}</Text>
-                        <Text style={localStyles.personMeta}>{watcher.phone}</Text>
-                        <View style={localStyles.requestInfoRow}>
-                            <Text style={localStyles.requestDate}>Theo dõi từ {watcher.joinedAt}</Text>
+                    <View key={watcher.id} style={localStyles.watcherCard}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={localStyles.personName}>{watcher.name}</Text>
+                            <Text style={localStyles.personMeta}>{watcher.phone}</Text>
+                            <Text style={localStyles.requestDate}>
+                                Theo dõi từ {watcher.joinedAt}
+                            </Text>
                         </View>
+
+                        <TouchableOpacity
+                            style={localStyles.cancelIconButton}
+                            onPress={() => handleRemoveMonitorFromMe(watcher.id)}
+                        >
+                            <Text style={localStyles.cancelIconText}>Hủy</Text>
+                        </TouchableOpacity>
                     </View>
                 ))
             )}
@@ -197,5 +232,46 @@ const localStyles = StyleSheet.create({
     emptyText: {
         color: "#795548",
         fontSize: 14,
+    },
+    cancelButton: {
+        marginTop: 12,
+        backgroundColor: "#D32F2F",
+        borderRadius: 14,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        alignItems: "center",
+    },
+    cancelButtonText: {
+        color: "#fff",
+        fontWeight: "700",
+        fontSize: 12,
+    },
+    watcherCard: {
+        backgroundColor: "#fff",
+        marginHorizontal: 16,
+        marginTop: 14,
+        borderRadius: 20,
+        padding: 16,
+        flexDirection: "row",
+        alignItems: "center",
+        shadowColor: "#000",
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 3,
+    },
+    cancelIconButton: {
+        marginLeft: 12,
+        backgroundColor: "#D32F2F",
+        borderRadius: 14,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    cancelIconText: {
+        color: "#fff",
+        fontWeight: "700",
+        fontSize: 12,
     },
 });

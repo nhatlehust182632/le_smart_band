@@ -94,30 +94,30 @@ export function monitorHook() {
         }
     };
 
-    const stopMonitoring = async (userId: string, monitoredId: string) => {
+    const stopMonitoring = async (userId: string, relationId: string) => {
         if (loading) return;
-        if (!userId || !monitoredId) {
+        if (!userId || !relationId) {
             throw new Error("Lỗi chức năng");
         }
+
         try {
             setLoading(true);
-            const response = await monitorServices.approveRequest(userId, monitoredId);
-
+            const response = await monitorServices.cancelMonitoring(userId, relationId);
             return response;
         } finally {
             setLoading(false);
         }
     };
 
-    const removeMonitorFromMe = async (userId: string, monitorId: string) => {
+    const removeMonitorFromMe = async (userId: string, relationId: string) => {
         if (loading) return;
-        if (!userId || !monitorId) {
+        if (!userId || !relationId) {
             throw new Error("Lỗi chức năng");
         }
+
         try {
             setLoading(true);
-            const response = await monitorServices.approveRequest(userId, monitorId);
-
+            const response = await monitorServices.cancelFollower(userId, relationId);
             return response;
         } finally {
             setLoading(false);

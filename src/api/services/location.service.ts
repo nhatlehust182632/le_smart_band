@@ -7,14 +7,28 @@ export const locationService = {
                 id: data.id,
                 latitude: data.latitude,
                 longitude: data.longitude,
+                place_key: data.place_key,
                 place_name: data.place_name,
+                days: data.days || 1,
             },
         });
     },
-    getHistoryData(id: string) {
+
+    getHistoryData(id: string, days: number) {
         return callApi("getListHistoryUser", {
-            pathParams: { id },
-            query: { id },
+            query: {
+                id,
+                days,
+            },
+        });
+    },
+
+    getTopLocationData(id: string, days: number) {
+        return callApi("getTopLocationUser", {
+            query: {
+                id,
+                days,
+            },
         });
     },
 };

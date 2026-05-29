@@ -4,54 +4,56 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CurrentLocation } from "../components/home/types";
 
 const LOCATION_UPDATE_INTERVAL = 30000;
-const DISTANCE_THRESHOLD = 100;
+const MIN_REVERSE_GEOCODE_INTERVAL_MS = 60_000;
+const PLACE_KEY_PRECISION = 3;
+const MIN_SAVE_LOCATION_INTERVAL_MS = 10_000;
 
-function calculateDistance(
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number
-): number {
-    const R = 6371000;
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+// function calculateDistance(
+//     lat1: number,
+//     lon1: number,
+//     lat2: number,
+//     lon2: number
+// ): number {
+//     const R = 6371000;
+//     const dLat = ((lat2 - lat1) * Math.PI) / 180;
+//     const dLon = ((lon2 - lon1) * Math.PI) / 180;
 
-    const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+//     const a =
+//         Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+//         Math.cos((lat1 * Math.PI) / 180) *
+//         Math.cos((lat2 * Math.PI) / 180) *
+//         Math.sin(dLon / 2) *
+//         Math.sin(dLon / 2);
 
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+//     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-    return R * c;
-}
+//     return R * c;
+// }
 
-interface SaveLocationData {
-    id: string;
+export type SaveLocationData = {
+    userId: string | number;
     latitude: number;
     longitude: number;
-    place_name: string;
-}
+    place_key: string;
+};
 
-interface SavedLocation {
-    latitude: number | string;
-    longitude: number | string;
-}
+// interface SavedLocation {
+//     latitude: number | string;
+//     longitude: number | string;
+// }
 
-function formatAddress(address: Location.LocationGeocodedAddress): string {
-    return [
-        address.name,
-        address.street,
-        address.district,
-        address.city,
-        address.region,
-        address.country,
-    ]
-        .filter(Boolean)
-        .join(", ");
-}
+// function formatAddress(address: Location.LocationGeocodedAddress): string {
+//     return [
+//         address.name,
+//         address.street,
+//         address.district,
+//         address.city,
+//         address.region,
+//         address.country,
+//     ]
+//         .filter(Boolean)
+//         .join(", ");
+// }
 
 export function useLocationTracking(userId: string | undefined) {
     const [currentLocation, setCurrentLocation] =
@@ -62,12 +64,77 @@ export function useLocationTracking(userId: string | undefined) {
 
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const isMountedRef = useRef(true);
+    const addressCacheRef = useRef<Record<string, string>>({});
+    const lastReverseGeocodeAtRef = useRef(0);
+    const lastReverseGeocodePlaceKeyRef = useRef<string | null>(null);
+
+    const lastSaveLocationAttemptAtRef = useRef(0);
+    const isSavingLocationRef = useRef(false);
+
+
+    const buildPlaceKey = (latitude: number, longitude: number) => {
+        return `${latitude.toFixed(PLACE_KEY_PRECISION)}_${longitude.toFixed(
+            PLACE_KEY_PRECISION
+        )}`;
+    };
+
+    const buildAddressPlaceKey = (latitude: number, longitude: number) => {
+        return `${latitude.toFixed(PLACE_KEY_PRECISION)},${longitude.toFixed(
+            PLACE_KEY_PRECISION
+        )}`;
+    };
+
+    const normalizePlaceKey = (placeKey?: string | null) => {
+        return typeof placeKey === "string" ? placeKey.trim() : "";
+    };
+
+    const formatAddress = (address: Location.LocationGeocodedAddress) => {
+        const parts = [
+            address.name,
+            address.street,
+            address.district,
+            address.city,
+            address.region,
+            address.country,
+        ].filter(Boolean);
+
+        return parts.join(", ");
+    };
 
     const fetchLocationAddress = useCallback(
         async (latitude: number, longitude: number): Promise<string> => {
             const unknownAddress = "Không xác định được tên vị trí";
+            const errorAddress = "Không thể lấy tên vị trí";
+
+            const addressPlaceKey = buildAddressPlaceKey(latitude, longitude);
+
+            const cachedAddress = addressCacheRef.current[addressPlaceKey];
+
+            if (cachedAddress) {
+                if (isMountedRef.current) {
+                    setLocationAddress(cachedAddress);
+                }
+
+                return cachedAddress;
+            }
+
+            if (lastReverseGeocodePlaceKeyRef.current === addressPlaceKey) {
+                return locationAddress || unknownAddress;
+            }
+
+            const now = Date.now();
+
+            if (
+                now - lastReverseGeocodeAtRef.current <
+                MIN_REVERSE_GEOCODE_INTERVAL_MS
+            ) {
+                return locationAddress || unknownAddress;
+            }
 
             try {
+                lastReverseGeocodePlaceKeyRef.current = addressPlaceKey;
+                lastReverseGeocodeAtRef.current = now;
+
                 const addresses = await Location.reverseGeocodeAsync({
                     latitude,
                     longitude,
@@ -79,11 +146,14 @@ export function useLocationTracking(userId: string | undefined) {
                     if (isMountedRef.current) {
                         setLocationAddress(unknownAddress);
                     }
+
                     return unknownAddress;
                 }
 
                 const formattedAddress =
                     formatAddress(firstAddress) || unknownAddress;
+
+                addressCacheRef.current[addressPlaceKey] = formattedAddress;
 
                 if (isMountedRef.current) {
                     setLocationAddress(formattedAddress);
@@ -93,8 +163,6 @@ export function useLocationTracking(userId: string | undefined) {
             } catch (err) {
                 console.error("Lỗi lấy tên vị trí:", err);
 
-                const errorAddress = "Không thể lấy tên vị trí";
-
                 if (isMountedRef.current) {
                     setLocationAddress(errorAddress);
                 }
@@ -102,7 +170,7 @@ export function useLocationTracking(userId: string | undefined) {
                 return errorAddress;
             }
         },
-        []
+        [locationAddress]
     );
 
     const fetchCurrentLocation =
@@ -155,69 +223,111 @@ export function useLocationTracking(userId: string | undefined) {
             }
         }, [fetchLocationAddress]);
 
-    const updateLocationIfNeeded = useCallback(
-        async (current: CurrentLocation): Promise<void> => {
-            if (!userId) return;
+    // const extractSavedLocationList = (response: unknown): SavedLocation[] => {
+    //     if (Array.isArray(response)) {
+    //         return response as SavedLocation[];
+    //     }
 
-            try {
-                if (isMountedRef.current) {
-                    setLoading(true);
-                }
+    //     if (
+    //         response &&
+    //         typeof response === "object" &&
+    //         "data" in response &&
+    //         Array.isArray((response as { data?: unknown }).data)
+    //     ) {
+    //         return (response as { data: SavedLocation[] }).data;
+    //     }
 
-                const savedLocations =
-                    await locationService.getHistoryData(userId);
-                const historyData = Array.isArray(savedLocations)
-                    ? savedLocations
-                    : savedLocations?.historyData;
-                const lastSavedLocation = historyData?.[0] as
-                    | SavedLocation
-                    | undefined;
+    //     if (
+    //         response &&
+    //         typeof response === "object" &&
+    //         "historyData" in response &&
+    //         Array.isArray((response as { historyData?: unknown }).historyData)
+    //     ) {
+    //         return (response as { historyData: SavedLocation[] }).historyData;
+    //     }
 
-                const locationData: SaveLocationData = {
-                    id: userId,
-                    latitude: current.latitude,
-                    longitude: current.longitude,
-                    place_name: current.placeName || locationAddress,
-                };
+    //     return [];
+    // };
 
-                if (!lastSavedLocation) {
-                    await locationService.saveLocationPlace(locationData);
-                    // console.log("✓ Vị trí đã được lưu lên BE lần đầu tiên");
-                    return;
-                }
+    const updateLocationIfNeeded = async (
+        current: CurrentLocation
+    ): Promise<void> => {
+        if (!userId) return;
 
-                const distance = calculateDistance(
-                    current.latitude,
-                    current.longitude,
-                    Number(lastSavedLocation.latitude),
-                    Number(lastSavedLocation.longitude)
-                );
+        if (isSavingLocationRef.current) {
+            return;
+        }
 
-                // console.log(
-                //     `Khoảng cách từ vị trí đã lưu: ${distance.toFixed(2)}m`
-                // );
+        const now = Date.now();
+        const isSaveTooSoon =
+            now - lastSaveLocationAttemptAtRef.current <
+            MIN_SAVE_LOCATION_INTERVAL_MS;
 
-                if (distance > DISTANCE_THRESHOLD) {
-                    await locationService.saveLocationPlace(locationData);
-                    // console.log("✓ Vị trí đã được lưu lên BE");
-                } else {
-                    // console.log("Vị trí chưa cách đủ 100m, không cần lưu");
-                }
-            } catch (err) {
-                const errorMsg =
-                    err instanceof Error
-                        ? err.message
-                        : "Lỗi khi cập nhật vị trí trên BE";
+        if (isSaveTooSoon) {
+            return;
+        }
 
-                console.error("Lỗi cập nhật vị trí:", errorMsg);
-            } finally {
-                if (isMountedRef.current) {
-                    setLoading(false);
-                }
+        lastSaveLocationAttemptAtRef.current = now;
+        isSavingLocationRef.current = true;
+
+        try {
+            setLoading(true);
+
+            const currentPlaceKey = buildPlaceKey(
+                current.latitude,
+                current.longitude
+            );
+
+            const savedLocationsResponse =
+                await locationService.getHistoryData(userId, 3);
+
+            const locationList = Array.isArray(savedLocationsResponse)
+                ? savedLocationsResponse
+                : Array.isArray(savedLocationsResponse?.data)
+                    ? savedLocationsResponse.data
+                    : [];
+
+            const lastSavedLocation = locationList[0];
+
+            const lastSavedPlaceKey = normalizePlaceKey(
+                lastSavedLocation?.place_key
+            );
+
+            console.log("[LOCATION COMPARE]", {
+                current_place_key: currentPlaceKey,
+                last_saved_place_key: lastSavedPlaceKey || null,
+                should_save:
+                    !lastSavedLocation || lastSavedPlaceKey !== currentPlaceKey,
+            });
+
+            const shouldSaveLocation =
+                !lastSavedLocation || lastSavedPlaceKey !== currentPlaceKey;
+
+            if (!shouldSaveLocation) {
+                console.log("Vị trí trùng place_key, không lưu mới", {
+                    place_key: currentPlaceKey,
+                });
+                return;
             }
-        },
-        [locationAddress, userId]
-    );
+
+            // await locationService.saveLocationPlace({
+            //     latitude: current.latitude,
+            //     longitude: current.longitude,
+            //     userId,
+            //     place_key: currentPlaceKey,
+            // });
+
+            console.log("Đã lưu vị trí mới", {
+                old_place_key: lastSavedPlaceKey || null,
+                new_place_key: currentPlaceKey,
+            });
+        } catch (err) {
+            console.error("Lỗi cập nhật vị trí:", err);
+        } finally {
+            isSavingLocationRef.current = false;
+            setLoading(false);
+        }
+    };
 
     const handleLocationUpdate = useCallback(async (): Promise<void> => {
         const current = await fetchCurrentLocation();

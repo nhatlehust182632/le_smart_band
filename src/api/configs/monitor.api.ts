@@ -101,4 +101,33 @@ export const monitorApiS: Record<string, ApiConfig> = {
         token: "USER_ACCESS_TOKEN",
         transformResponse: (data) => data?.data || data,
     },
+    cancelMonitoring: {
+        name: "cancelMonitoring",
+        baseUrl: ENV.USER_API_BASE_URL,
+        endpoint: "/api/monitor/cancel-monitoring",
+        method: "POST",
+        timeout: ENV.DEFAULT_TIMEOUT,
+        retries: 2,
+        authType: "bearer",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        token: "USER_ACCESS_TOKEN",
+        transformResponse: (data) => data?.data || data,
+    },
+
+    cancelFollower: {
+        name: "cancelFollower",
+        baseUrl: ENV.USER_API_BASE_URL,
+        endpoint: "/api/monitor/cancel-follower",
+        method: "POST",
+        timeout: ENV.DEFAULT_TIMEOUT,
+        retries: 2,
+        authType: "bearer",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        token: "USER_ACCESS_TOKEN",
+        transformResponse: (data) => data?.data || data,
+    },
 };

@@ -61,6 +61,23 @@ export const monitorSources = {
         });
 
         return rawData;
-    }
+    },
+    async cancelMonitoring(id: string, relationId: string) {
+        return callApi("cancelMonitoring", {
+            body: {
+                idUser: id,
+                relationId,
+            },
+        });
+    },
+
+    async cancelFollower(id: string, relationId: string) {
+        return callApi("cancelFollower", {
+            body: {
+                idUser: id,
+                relationId,
+            },
+        });
+    },
 
 };

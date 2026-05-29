@@ -1,3 +1,4 @@
+import { useAuth } from "@/context/AuthContext";
 import { monitorHook } from "@/hooks/monitor";
 import {
   FontAwesome5,
@@ -8,6 +9,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -80,9 +82,8 @@ export default function MonitorDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   // const person = monitorDetails[id || "001"];
   const [monitorId, setMonitorId] = useState<HeartRate | null>(null);
-  const {
-    getMonitorId
-  } = monitorHook();
+  const { user } = useAuth();
+  const { getMonitorId, stopMonitoring } = monitorHook();
 
   const handleGetHeartRate = async () => {
     if (loading) return;
@@ -97,6 +98,37 @@ export default function MonitorDetailScreen() {
     } finally {
       setLoading(false);
     }
+  };
+  const handleStopMonitoring = async () => {
+    if (!user?.id || !id) {
+      Alert.alert("Lỗi", "Thiếu thông tin người dùng hoặc mã giám sát.");
+      return;
+    }
+
+    Alert.alert(
+      "Xác nhận",
+      "Bạn có muốn hủy giám sát người này không?",
+      [
+        { text: "Không", style: "cancel" },
+        {
+          text: "Hủy giám sát",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await stopMonitoring(user.id, id);
+              Alert.alert("Thành công", "Đã hủy giám sát.");
+              router.back();
+            } catch (error) {
+              console.log("Lỗi hủy giám sát:", error);
+              Alert.alert("Lỗi", (error as Error)?.message || "Không thể hủy giám sát.");
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   useEffect(() => {
@@ -254,6 +286,14 @@ export default function MonitorDetailScreen() {
             </TouchableOpacity>
           </View>
 
+          <TouchableOpacity
+            style={localStyles.cancelMonitorButton}
+            onPress={handleStopMonitoring}
+            disabled={loading}
+          >
+            <Text style={localStyles.cancelMonitorButtonText}>Hủy giám sát</Text>
+          </TouchableOpacity>
+
           <View style={{ height: 24 }} />
         </ScrollView>
       </View>
@@ -287,6 +327,19 @@ const localStyles = StyleSheet.create({
   actionButtonText: {
     color: "#fff",
     fontWeight: "700",
+    fontSize: 15,
+  },
+  cancelMonitorButton: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    backgroundColor: "#D32F2F",
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: "center",
+  },
+  cancelMonitorButtonText: {
+    color: "#fff",
+    fontWeight: "800",
     fontSize: 15,
   },
 });

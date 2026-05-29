@@ -1,4 +1,3 @@
-import { Profile } from "@/api/models/user.model";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -20,7 +19,7 @@ import { styles } from "../../../styles/appStyles";
 
 export default function ProfileScreen() {
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<Profile | null>(null);
+  const [data, setData] = useState<any | null>(null);
   const [notifyFamily, setNotifyFamily] = useState(true);
   const [heartAlert, setHeartAlert] = useState(true);
   const [gpsTracking, setGpsTracking] = useState(true);
@@ -78,9 +77,9 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.profileTag}>
                 <Text style={styles.profileTagText}>
-                  {data?.gender == "male"
+                  {Number(data?.gender) === 1
                     ? "Nam"
-                    : data?.gender == "female"
+                    : Number(data?.gender) === 2
                       ? "Nữ"
                       : "Khác"}
                 </Text>
@@ -118,17 +117,17 @@ export default function ProfileScreen() {
               <Text style={styles.infoValue}>{data?.phone ?? ""}</Text>
             </View>
 
-            <View style={styles.infoItem}>
+            {/* <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Người liên hệ khẩn cấp</Text>
               <Text style={styles.infoValue}>
                 {data?.emergency_contact_name ?? ""}
               </Text>
-            </View>
+            </View> */}
 
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>SĐT liên hệ khẩn cấp</Text>
               <Text style={styles.infoValue}>
-                {data?.emergency_contact_phone ?? ""}
+                {data?.emergency_phone ?? ""}
               </Text>
             </View>
 

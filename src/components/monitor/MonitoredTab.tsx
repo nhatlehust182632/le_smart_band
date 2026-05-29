@@ -4,6 +4,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+    Alert,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -28,7 +29,7 @@ type MonitoredTabProps = {
 export function MonitoredTab({ userId }: MonitoredTabProps) {
     const [monitoredList, setMonitoredList] = useState<MonitorPerson[]>([]);
     const [loading, setLoading] = useState(false);
-    const { getListMonitors } = monitorHook();
+    const { getListMonitors, stopMonitoring } = monitorHook();
 
     const loadMonitoredList = async () => {
         if (loading) return;
@@ -41,6 +42,32 @@ export function MonitoredTab({ userId }: MonitoredTabProps) {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleStopMonitoring = async (relationId: string) => {
+        Alert.alert(
+            "Xác nhận",
+            "Bạn có muốn hủy giám sát người này không?",
+            [
+                { text: "Không", style: "cancel" },
+                {
+                    text: "Hủy giám sát",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            setLoading(true);
+                            await stopMonitoring(userId, relationId);
+                            await loadMonitoredList();
+                        } catch (error) {
+                            console.log("Lỗi hủy giám sát:", error);
+                            Alert.alert("Lỗi", (error as Error)?.message || "Không thể hủy giám sát.");
+                        } finally {
+                            setLoading(false);
+                        }
+                    },
+                },
+            ],
+        );
     };
 
     useEffect(() => {
@@ -89,6 +116,12 @@ export function MonitoredTab({ userId }: MonitoredTabProps) {
                                 onPress={() => router.push(`../tabs/monitor/${person.id}`)}
                             >
                                 <Text style={localStyles.detailButtonText}>Chi tiết</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={localStyles.cancelButton}
+                                onPress={() => handleStopMonitoring(person.id)}
+                            >
+                                <Text style={localStyles.cancelButtonText}>Hủy</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -173,5 +206,17 @@ const localStyles = StyleSheet.create({
     emptyText: {
         color: "#795548",
         fontSize: 14,
+    },
+    cancelButton: {
+        marginTop: 8,
+        backgroundColor: "#D32F2F",
+        borderRadius: 14,
+        paddingVertical: 8,
+        paddingHorizontal: 10,
+    },
+    cancelButtonText: {
+        color: "#fff",
+        fontWeight: "700",
+        fontSize: 12,
     },
 });

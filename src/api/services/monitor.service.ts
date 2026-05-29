@@ -2,7 +2,7 @@ import { monitorSources } from "@/data-sources/monitorSource";
 
 export const monitorServices = {
     getListMonitorByUser(id: string) {
-        return monitorSources.getFollowing(id);
+        return monitorSources.getMonitorSourceByUser(id);
     },
 
     getMonitorIdDetailService(idMonitor: string) {
@@ -27,5 +27,11 @@ export const monitorServices = {
 
     sendFollowRequestByPhone(id: string, phone: string) {
         return monitorSources.sendFollowRequestByPhone({ id, phone });
+    },
+    cancelMonitoring(id: string, relationId: string) {
+        return monitorSources.cancelMonitoring(id, relationId);
+    },
+    cancelFollower(id: string, relationId: string) {
+        return monitorSources.cancelFollower(id, relationId);
     },
 };

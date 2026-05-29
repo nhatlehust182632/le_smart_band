@@ -33,10 +33,7 @@ type HistoryItem = {
   visitCount?: number;
 };
 
-type TopPlaceItem = {
-  address: string;
-  count: number;
-};
+type HistoryFilterDays = 1 | 3 | 7;
 
 type LocationPayload = {
   id: string;
@@ -44,26 +41,36 @@ type LocationPayload = {
   longitude: number;
   place_key: string;
   place_name: string;
+  days: HistoryFilterDays;
 };
 
-type InfoLocation = {
-  id: string;
-  latitude: string;
-  longitude: string;
+type HistoryLocation = {
+  id: number;
+  latitude: number;
+  longitude: number;
   place_key: string;
   place_name: string;
-  created_at: string;
+  recorded_at: string;
+};
+
+type TopLocation = {
+  place_name: string;
+  visit_count: number;
+  latitude: number;
+  longitude: number;
+  last_seen_at: string;
 };
 
 type LocationNew = {
-  historyData: InfoLocation[],
-  topData: InfoLocation[],
+  historyData: HistoryLocation[];
+  topData: TopLocation[];
 };
 
 export default function LocationScreen() {
   const mapRef = useRef<MapView | null>(null);
 
   const [dataLocation, setDataLocation] = useState<LocationNew | null>(null);
+  const [historyDays, setHistoryDays] = useState<HistoryFilterDays>(1);
   const [location, setLocation] = useState<LocationCoords | null>(null);
   const [address, setAddress] = useState<string>("Đang lấy vị trí...");
   const [updatedAt, setUpdatedAt] = useState<string>("");
@@ -71,7 +78,7 @@ export default function LocationScreen() {
   const [loading, setLoading] = useState(true);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const lastSavedPlaceKeyRef = useRef<string>("");
-  const { savePlaceNow, getListHistory } = locationPlace();
+  const { savePlaceNow, getListHistory, getTopLocation } = locationPlace();
   const { user } = useAuth();
 
   // lay vị tri lien tuc khi phace_key thay doi
@@ -89,18 +96,23 @@ export default function LocationScreen() {
       id,
       latitude,
       longitude,
-      place_key: buildPlaceKeyFromCoords(latitude, longitude),
       place_name: placeName,
+      days: historyDays,
+      place_key: buildPlaceKeyFromCoords(latitude, longitude),
     };
   };
 
   const saveLocationToDatabase = async (payload: LocationPayload) => {
     try {
-      // console.log("LOCATION PAYLOAD =>", payload);
       setLoading(true);
       const data = await savePlaceNow(payload);
 
-      setDataLocation(data);
+      if (data) {
+        setDataLocation({
+          historyData: Array.isArray(data.historyData) ? data.historyData : [],
+          topData: Array.isArray(data.topData) ? data.topData : [],
+        });
+      }
     } catch (error) {
       console.log("Save location error:", error);
     } finally {
@@ -113,18 +125,16 @@ export default function LocationScreen() {
     longitude: number,
     placeName: string
   ) => {
-    const payload = buildLocationPayload(latitude, longitude, placeName, user?.id || "");
+    if (!user?.id) {
+      console.log("Chưa có user id, bỏ qua lưu vị trí");
+      return;
+    }
 
+    const payload = buildLocationPayload(latitude, longitude, placeName, user.id);
+
+    // const currentKey = buildPlaceKeyFromCoords(latitude, longitude);
     const currentKey = payload.place_key;
     const lastKey = lastSavedPlaceKeyRef.current;
-
-    // console.log("===== LOCATION DEBUG =====");
-    // console.log("Place name:", placeName);
-    // console.log("Latitude:", latitude);
-    // console.log("Longitude:", longitude);
-    // console.log("New place_key:", currentKey);
-    // console.log("Last place_key:", lastKey);
-    // console.log("Last place_name:", placeName);
 
     // Lần đầu
     if (!lastKey) {
@@ -220,6 +230,52 @@ export default function LocationScreen() {
     }
   };
 
+  const loadLocationData = async () => {
+    if (!user?.id) return;
+
+    try {
+      setLoading(true);
+
+      const [historyData, topData] = await Promise.all([
+        getListHistory(user.id, historyDays),
+        getTopLocation(user.id, historyDays),
+      ]);
+
+      setDataLocation({
+        historyData: Array.isArray(historyData) ? historyData : [],
+        topData: Array.isArray(topData) ? topData : [],
+      });
+    } catch (error) {
+      console.log("Load location data error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadHistoryByDays = async (days: HistoryFilterDays) => {
+    if (!user?.id) return;
+
+    try {
+      setLoading(true);
+
+      const historyData = await getListHistory(user.id, days);
+
+      setDataLocation((prev) => ({
+        historyData: Array.isArray(historyData) ? historyData : [],
+        topData: prev?.topData || [],
+      }));
+    } catch (error) {
+      console.log("Load history by days error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChangeHistoryDays = async (days: HistoryFilterDays) => {
+    setHistoryDays(days);
+    await loadHistoryByDays(days);
+  };
+
   const getLocationOnce = async () => {
     try {
       setLoading(true);
@@ -239,7 +295,7 @@ export default function LocationScreen() {
       setGpsStatus("Đang hoạt động");
 
       const currentLocation = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
+        accuracy: Location.Accuracy.Low,
       });
 
       const coords = {
@@ -258,7 +314,7 @@ export default function LocationScreen() {
           latitudeDelta: 0.01,
           longitudeDelta: 0.01,
         },
-        1000
+        10000
       );
 
       const fullAddress = await getAddressFromCoords(
@@ -290,47 +346,58 @@ export default function LocationScreen() {
       await getLocationOnce();
 
       try {
-        subscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.High,
-            timeInterval: 5000,
-            distanceInterval: 5,
-          },
-          async (newLocation) => {
-            const newCoords = {
-              latitude: newLocation.coords.latitude,
-              longitude: newLocation.coords.longitude,
-              accuracy: newLocation.coords.accuracy,
-            };
+        // subscription = await Location.watchPositionAsync(
+        //   {
+        //     accuracy: Location.Accuracy.Low,
+        //     timeInterval: 60000,
+        //     distanceInterval: 100,
+        //   },
+        //   async (newLocation) => {
+        //     const newCoords = {
+        //       latitude: newLocation.coords.latitude,
+        //       longitude: newLocation.coords.longitude,
+        //       accuracy: newLocation.coords.accuracy,
+        //     };
 
-            setLocation(newCoords);
-            setUpdatedAt(formatDateTime(new Date()));
+        //     const currentKey = buildPlaceKeyFromCoords(
+        //       newCoords.latitude,
+        //       newCoords.longitude
+        //     );
 
-            mapRef.current?.animateToRegion(
-              {
-                latitude: newCoords.latitude,
-                longitude: newCoords.longitude,
-                latitudeDelta: 0.01,
-                longitudeDelta: 0.01,
-              },
-              1000
-            );
+        //     const lastKey = lastSavedPlaceKeyRef.current;
 
-            const fullAddress = await getAddressFromCoords(
-              newCoords.latitude,
-              newCoords.longitude
-            );
+        //     setLocation(newCoords);
+        //     setUpdatedAt(formatDateTime(new Date()));
 
-            setAddress(fullAddress);
-            addToHistory(newCoords.latitude, newCoords.longitude, fullAddress);
+        //     if (currentKey === lastKey) {
+        //       return;
+        //     }
 
-            await saveLocationIfNeeded(
-              newCoords.latitude,
-              newCoords.longitude,
-              fullAddress
-            );
-          }
-        );
+        //     mapRef.current?.animateToRegion(
+        //       {
+        //         latitude: newCoords.latitude,
+        //         longitude: newCoords.longitude,
+        //         latitudeDelta: 0.01,
+        //         longitudeDelta: 0.01,
+        //       },
+        //       10000
+        //     );
+
+        //     const fullAddress = await getAddressFromCoords(
+        //       newCoords.latitude,
+        //       newCoords.longitude
+        //     );
+
+        //     setAddress(fullAddress);
+        //     addToHistory(newCoords.latitude, newCoords.longitude, fullAddress);
+
+        //     await saveLocationIfNeeded(
+        //       newCoords.latitude,
+        //       newCoords.longitude,
+        //       fullAddress
+        //     );
+        //   }
+        // );
       } catch (e) {
         console.log("Watch location error:", e);
       }
@@ -340,7 +407,7 @@ export default function LocationScreen() {
 
     return () => {
       if (subscription) {
-        subscription.remove();
+        // subscription.remove();
       }
     };
   }, []);
@@ -354,26 +421,15 @@ export default function LocationScreen() {
     };
   }, [location]);
 
-  const topPlaces: TopPlaceItem[] = useMemo(() => {
-    const placeMap = new Map<string, number>();
+  useEffect(() => {
+    loadLocationData();
+  }, [user?.id, historyDays]);
 
-    history.forEach((item) => {
-      const key = normalizeAddress(item.address);
-      if (!key) return;
+  useEffect(() => {
+    if (!user?.id) return;
 
-      placeMap.set(key, (placeMap.get(key) || 0) + (item.visitCount || 1));
-    });
-
-    return Array.from(placeMap.entries())
-      .map(([addr, count]) => ({
-        address: addr,
-        count,
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 3);
-  }, [history]);
-
-  console.log("place_name: " + dataLocation?.historyData);
+    loadHistoryByDays(historyDays);
+  }, [user?.id]);
 
   return (
     <SafeAreaView style={localStyles.safeGreen}>
@@ -486,6 +542,59 @@ export default function LocationScreen() {
               <Text style={styles.cardTitle}>Lịch sử di chuyển</Text>
             </View>
 
+            <View style={localStyles.historyFilterRow}>
+              <TouchableOpacity
+                style={[
+                  localStyles.historyFilterButton,
+                  historyDays === 1 && localStyles.historyFilterButtonActive,
+                ]}
+                onPress={() => handleChangeHistoryDays(1)}
+              >
+                <Text
+                  style={[
+                    localStyles.historyFilterText,
+                    historyDays === 1 && localStyles.historyFilterTextActive,
+                  ]}
+                >
+                  24h
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  localStyles.historyFilterButton,
+                  historyDays === 3 && localStyles.historyFilterButtonActive,
+                ]}
+                onPress={() => handleChangeHistoryDays(3)}
+              >
+                <Text
+                  style={[
+                    localStyles.historyFilterText,
+                    historyDays === 3 && localStyles.historyFilterTextActive,
+                  ]}
+                >
+                  3 ngày
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  localStyles.historyFilterButton,
+                  historyDays === 7 && localStyles.historyFilterButtonActive,
+                ]}
+                onPress={() => handleChangeHistoryDays(7)}
+              >
+                <Text
+                  style={[
+                    localStyles.historyFilterText,
+                    historyDays === 7 && localStyles.historyFilterTextActive,
+                  ]}
+                >
+                  7 ngày
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             {/* {history.length === 0 ? ( */}
             {/* {dataHistory.length === 0 ? ( */}
             {!dataLocation || dataLocation?.historyData == null || dataLocation.historyData.length === 0 ? (
@@ -494,7 +603,7 @@ export default function LocationScreen() {
               dataLocation.historyData.map((item) => (
                 <View key={item.id} style={localStyles.historyItem}>
                   <View style={localStyles.historyHeaderRow}>
-                    <Text style={localStyles.historyTime}>{formatDateTimeV2(item.created_at)}</Text>
+                    <Text style={localStyles.historyTime}>{formatDateTimeV2(item.recorded_at)}</Text>
                     {/* <Text style={localStyles.historyBadge}>
                       {(item.visitCount || 1)} lần
                     </Text> */}
@@ -522,10 +631,10 @@ export default function LocationScreen() {
             ) : (
               dataLocation.topData.map((place, index) => (
                 <View
-                  key={`${place.place_key}-${index}`}
+                  key={`${place.place_name}-${index}`}
                   style={[
                     localStyles.topPlaceItem,
-                    index === topPlaces.length - 1 && {
+                    index === dataLocation.topData.length - 1 && {
                       borderBottomWidth: 0,
                       paddingBottom: 0,
                     },
@@ -539,9 +648,10 @@ export default function LocationScreen() {
                     <Text style={localStyles.topPlaceAddress}>
                       {place.place_name}
                     </Text>
-                    {/* <Text style={localStyles.topPlaceCount}>
-                      Đã đến {place.count} lần
-                    </Text> */}
+
+                    <Text style={localStyles.topPlaceCount}>
+                      Đã đến {place.visit_count} lần
+                    </Text>
                   </View>
                 </View>
               ))
@@ -700,5 +810,32 @@ const localStyles = StyleSheet.create({
   topPlaceCount: {
     fontSize: 13,
     color: "#666",
+  },
+  historyFilterRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+    marginBottom: 8,
+  },
+
+  historyFilterButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    backgroundColor: "#E3F2FD",
+  },
+
+  historyFilterButtonActive: {
+    backgroundColor: "#1565C0",
+  },
+
+  historyFilterText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1565C0",
+  },
+
+  historyFilterTextActive: {
+    color: "#fff",
   },
 });

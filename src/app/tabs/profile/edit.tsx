@@ -1,4 +1,3 @@
-import { User } from "@/api/models/user.model";
 import { useAuth } from "@/context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -23,12 +22,11 @@ import { styles } from "../../../styles/appStyles";
 export default function EditProfileScreen() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
-  const [emergency_contact_name, setEmergency_contact_name] = useState("");
-  const [emergency_contact_phone, setEmergency_contact_phone] = useState("");
-  const [age, setAge] = useState("");
+  const [emergency_phone, setEmergency_phone] = useState("");
+  const [date_of_birth, setDate_of_birth] = useState("");
+  const [gender, setGender] = useState("1");
   const [height_cm, setHeight_cm] = useState("");
   const [weight_kg, setWeight_kg] = useState("");
-  const [gender, setGender] = useState("male");
   const [genderModalVisible, setGenderModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
@@ -43,9 +41,13 @@ export default function EditProfileScreen() {
       if (!data) return;
       setFullName(data?.full_name);
       setPhone(data?.phone);
-      setEmergency_contact_name(data?.emergency_contact_name);
-      setEmergency_contact_phone(data?.emergency_contact_phone);
-      setAge(data?.age + "" || "");
+      setFullName(profileDetail?.full_name ?? "");
+      setPhone(profileDetail?.phone ?? "");
+      setDate_of_birth(formatDateFromApi(profileDetail?.date_of_birth));
+      setHeight_cm(profileDetail?.height_cm ? String(profileDetail.height_cm) : "");
+      setWeight_kg(profileDetail?.weight_kg ? String(profileDetail.weight_kg) : "");
+      setEmergency_phone(profileDetail?.emergency_phone ?? "");
+      setGender(profileDetail?.gender ? String(profileDetail.gender) : "1");
       setHeight_cm(data?.height_cm + "" || "");
       setWeight_kg(data?.weight_kg + "" || "");
       setGender(data?.gender);
@@ -60,7 +62,7 @@ export default function EditProfileScreen() {
   const handleSave = async () => {
     if (loading) return;
 
-    if (!fullName) {
+    if (date_of_birth && !formatDateToApi(date_of_birth)) {
       Alert.alert(
         "Thiếu thông tin",
         "Vui lòng nhập đầy đủ thông tin Họ và tên.",
@@ -70,24 +72,15 @@ export default function EditProfileScreen() {
 
     try {
       setLoading(true);
-      const paramData: User = {
+      const paramData: any = {
         id: user?.id || "",
-        email: "",
-        phone: "",
-        password_hash: "",
         full_name: fullName,
-        gender: gender,
-        date_of_birth: null,
-        height_cm: Number(height_cm),
-        weight_kg: Number(weight_kg),
-        timezone: "",
-        language: "",
-        status: "active",
-        created_at: "",
-        updated_at: null,
-        age: Number(age),
-        emergency_contact_name: emergency_contact_name,
-        emergency_contact_phone: emergency_contact_phone,
+        gender: Number(gender),
+        date_of_birth: formatDateToApi(date_of_birth),
+        height_cm: height_cm ? Number(height_cm) : "",
+        weight_kg: weight_kg ? Number(weight_kg) : "",
+        emergency_phone: emergency_phone || null,
+        enable_heart_rate_alert: 1,
       };
       const data = await saveProfileDetail(paramData);
       console.log("Profile: ", data);
@@ -100,15 +93,60 @@ export default function EditProfileScreen() {
     }
   };
 
+  const formatDateInput = (text: string) => {
+    const cleaned = text.replace(/[^0-9]/g, "").slice(0, 8);
+
+    if (cleaned.length <= 2) {
+      return cleaned;
+    }
+
+    if (cleaned.length <= 4) {
+      return `${cleaned.slice(0, 2)}-${cleaned.slice(2)}`;
+    }
+
+    return `${cleaned.slice(0, 2)}-${cleaned.slice(2, 4)}-${cleaned.slice(4)}`;
+  };
+
+  const formatDateFromApi = (date?: string | null) => {
+    if (!date) return "";
+
+    // Trường hợp API trả "2002-05-20T00:00:00.000Z"
+    const onlyDate = date.split("T")[0];
+
+    const [year, month, day] = onlyDate.split("-");
+    if (!year || !month || !day) return "";
+
+    return `${day}-${month}-${year}`;
+  };
+
+  const formatDateToApi = (date: string) => {
+    const [day, month, year] = date.split("-");
+
+    if (!day || !month || !year) return null;
+    if (day.length !== 2 || month.length !== 2 || year.length !== 4) return null;
+
+    return `${year}-${month}-${day}`;
+  };
+
   useEffect(() => {
     if (profileDetail) {
       setFullName(profileDetail?.full_name ?? "");
       setPhone(profileDetail?.phone ?? "");
-      setEmergency_contact_name(profileDetail?.emergency_contact_name ?? "");
-      setEmergency_contact_phone(profileDetail?.emergency_contact_phone ?? "");
-      setAge(profileDetail?.age + "" || "");
-      setHeight_cm(profileDetail?.height_cm + "" || "");
-      setWeight_kg(profileDetail?.weight_kg + "" || "");
+      setFullName(profileDetail?.full_name ?? "");
+      setPhone(profileDetail?.phone ?? "");
+      setDate_of_birth(formatDateFromApi(profileDetail?.date_of_birth));
+      setHeight_cm(
+        profileDetail?.height_cm !== null && profileDetail?.height_cm !== undefined
+          ? String(profileDetail.height_cm)
+          : ""
+      );
+      setWeight_kg(
+        profileDetail?.weight_kg !== null && profileDetail?.weight_kg !== undefined
+          ? String(profileDetail.weight_kg)
+          : ""
+      );
+      setEmergency_phone(profileDetail?.emergency_phone ?? "");
+      setGender(profileDetail?.gender ? String(profileDetail.gender) : "1");
       setGender(profileDetail?.gender ?? "male");
       return;
     }
@@ -164,20 +202,18 @@ export default function EditProfileScreen() {
               keyboardType="phone-pad"
             />
 
-            <Text style={localStyles.label}>Tuổi</Text>
+            <Text style={localStyles.label}>Ngày sinh</Text>
             <TextInput
               style={localStyles.input}
-              value={age}
-              // onChangeText={setAge}
-              placeholder="Nhập tuổi"
+              value={date_of_birth}
+              placeholder="DD-MM-YYYY"
               placeholderTextColor="#90A4AE"
               keyboardType="number-pad"
+              maxLength={10}
               onChangeText={(text) => {
-                const cleaned = text.replace(/[^0-9]/g, "");
-                setAge(cleaned);
+                setDate_of_birth(formatDateInput(text));
               }}
             />
-
             <Text style={localStyles.label}>Giới tính</Text>
             <TouchableOpacity
               style={localStyles.selectBox}
@@ -189,7 +225,7 @@ export default function EditProfileScreen() {
                   !gender && localStyles.placeholderText,
                 ]}
               >
-                {gender == "male" ? "Nam" : gender == "female" ? "Nữ" : "Khác"}
+                {gender === "1" ? "Nam" : gender === "2" ? "Nữ" : "Khác"}
               </Text>
 
               <Ionicons name="chevron-down" size={20} color="#607D8B" />
@@ -223,26 +259,24 @@ export default function EditProfileScreen() {
               }}
             />
 
-            <Text style={localStyles.label}>Người liên hệ khẩn cấp</Text>
+            {/* <Text style={localStyles.label}>Người liên hệ khẩn cấp</Text>
             <TextInput
               style={localStyles.input}
               value={emergency_contact_name}
               onChangeText={setEmergency_contact_name}
               placeholder="Nhập người liên hệ khẩn cấp"
               placeholderTextColor="#90A4AE"
-            />
+            /> */}
 
-            <Text style={localStyles.label}>
-              Số điện thoại liên hệ khẩn cấp liên hệ khẩn cấp
-            </Text>
+            <Text style={localStyles.label}>Số điện thoại khẩn cấp</Text>
             <TextInput
               style={localStyles.input}
-              value={emergency_contact_phone}
-              onChangeText={setEmergency_contact_phone}
-              placeholder="Nhập số điện thoại người liên hệ khẩn cấp"
+              value={emergency_phone}
+              onChangeText={setEmergency_phone}
+              placeholder="Nhập số điện thoại khẩn cấp"
               placeholderTextColor="#90A4AE"
+              keyboardType="phone-pad"
             />
-
             <TouchableOpacity
               style={[localStyles.saveButton, loading && { opacity: 0.7 }]}
               onPress={handleSave}
@@ -278,9 +312,9 @@ export default function EditProfileScreen() {
                 <Text style={localStyles.modalTitle}>Chọn giới tính</Text>
 
                 {[
-                  { name: "Nam", value: "male" },
-                  { name: "Nữ", value: "female" },
-                  { name: "Khác", value: "other" },
+                  { name: "Nam", value: "1" },
+                  { name: "Nữ", value: "2" },
+                  { name: "Khác", value: "3" },
                 ].map((item) => (
                   <TouchableOpacity
                     key={item.value}
