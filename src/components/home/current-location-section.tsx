@@ -33,7 +33,8 @@ export function CurrentLocationSection({
           >
             <MapView
               style={{ flex: 1 }}
-              region={{
+              // region={{
+              initialRegion={{
                 latitude: currentLocation.latitude,
                 longitude: currentLocation.longitude,
                 latitudeDelta: 0.01,

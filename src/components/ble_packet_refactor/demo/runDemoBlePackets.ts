@@ -1,4 +1,5 @@
-import { DEMO_BLE_PACKET_SESSIONS } from "./demoBlePackets";
+// import { DEMO_BLE_PACKET_SESSIONS } from "./demoBlePackets";
+import { DEMO_BLE_PACKET_SESSIONS } from "./demoBlePackets_v3";
 
 export type PrintBleDataFn = (
     source: string,

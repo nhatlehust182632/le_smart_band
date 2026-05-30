@@ -10,7 +10,7 @@
 // - Vẫn scan và connect thiết bị BLE thật.
 // - Sau khi connect xong, nhận dữ liệu thật bằng notify/poll.
 // ======================================================
-export const USE_DEMO_BLE_DATA = false;
+export const USE_DEMO_BLE_DATA = true;
 
 /**
  * Timeout của 1 tập packet.

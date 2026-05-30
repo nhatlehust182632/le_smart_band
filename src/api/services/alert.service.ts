@@ -31,7 +31,7 @@ export const alertService = {
     getAtrialAlertCount(id: string) {
         return callApi("getAtrialAlertCount", {
             query: {
-                id,
+                idUser: id,
             },
         });
     },

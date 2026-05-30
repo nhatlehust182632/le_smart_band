@@ -36,6 +36,8 @@ export const decodeBlePacket = (value: string): ParsedBlePacket => {
     const buffer = Buffer.from(value, "base64");
     // console.log("Decoded Buffer:", buffer);
     const dec = Array.from(buffer);
+    // console.log("Hex data input:", buffer.toString("hex"));
+    // console.log("Decimal byte values:", dec);
 
     if (buffer.length < 8) {
         return {
@@ -75,8 +77,87 @@ export const decodeBlePacket = (value: string): ParsedBlePacket => {
     let parsedPayload: ParsedBlePayload;
 
     switch (packetType) {
-        case 1:
-        case 2:
+        case 0: {
+            /**
+             * TYPE 0:
+             * Payload byte đầu tiên = % pin.
+             * Ví dụ: 85 => 85%
+             */
+            const rawBatteryPercent = payloadDec[0] ?? 0;
+
+            const batteryPercent = Math.max(
+                0,
+                Math.min(100, rawBatteryPercent)
+            );
+
+            parsedPayload = {
+                packetName: "TYPE_0",
+                status: "BATTERY_LEVEL",
+
+                payloadByteLength: payloadBuffer.length,
+                batteryPercent,
+
+                rawBytes: payloadDec,
+            };
+
+            break;
+        }
+
+        case 1: {
+            /**
+             * TYPE 1:
+             * Payload byte đầu tiên = trạng thái sạc.
+             * 1 = đang sạc
+             * 0 = không sạc
+             */
+            const chargingValue = payloadDec[0] ?? 0;
+            const isCharging = chargingValue === 1;
+
+            parsedPayload = {
+                packetName: "TYPE_1",
+                status: isCharging ? "CHARGING" : "NOT_CHARGING",
+
+                payloadByteLength: payloadBuffer.length,
+                chargingRawValue: chargingValue,
+                isCharging,
+
+                rawBytes: payloadDec,
+            };
+
+            break;
+        }
+
+        case 2: {
+            /**
+             * TYPE 2:
+             * Payload byte đầu tiên = mã trạng thái.
+             * Các byte còn lại giữ lại để lưu DB/debug.
+             */
+            const statusCode = payloadDec[0] ?? 0;
+
+            const statusNameMap: Record<number, string> = {
+                0: "NORMAL",
+                1: "LOW_BATTERY",
+                2: "CHARGING",
+                3: "FULL_BATTERY",
+                4: "DEVICE_ERROR",
+                5: "SENSOR_ERROR",
+            };
+
+            parsedPayload = {
+                packetName: "TYPE_2",
+                status: "DEVICE_PACKET_STATUS",
+
+                payloadByteLength: payloadBuffer.length,
+                statusCode,
+                statusName: statusNameMap[statusCode] ?? "UNKNOWN_STATUS",
+                statusPayload: payloadDec.slice(1),
+
+                rawBytes: payloadDec,
+            };
+
+            break;
+        }
         case 3:
         case 4:
             parsedPayload = {

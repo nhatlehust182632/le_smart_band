@@ -290,22 +290,50 @@ export const useBleConnectDevice = (
                     type5y: groupedSummary.mergedYValues?.length ?? 0,
                     type5z: groupedSummary.mergedZValues?.length ?? 0,
                 }
-                : {
-                    type6: groupedSummary.mergedValues?.length ?? 0,
-                };
+                : groupedSummary.packetType === 6
+                    ? {
+                        type6: groupedSummary.mergedValues?.length ?? 0,
+                    }
+                    : {
+                        systemPacketCount: groupedSummary.systemPacketDetails?.length ?? 0,
+                        totalPayloadByteLength: groupedSummary.totalPayloadByteLength,
+                    };
 
-        // console.log("[BLE TYPE SUMMARY]", {
-        //     type: groupedSummary.packetType,
-        //     mac: compactSingleOrList(groupedSummary.macList),
-        //     packetIds: compactSingleOrList(groupedSummary.packetIdList),
-        //     packetIndexes: groupedSummary.packetIndexList,
-        //     totalData,
-        //     receiveTime: {
-        //         firstReceivedAt,
-        //         lastReceivedAt,
-        //         receiveDurationMs,
-        //     },
-        // });
+        const systemData =
+            groupedSummary.packetType === 0
+                ? {
+                    batteryPercent: groupedSummary.latestBatteryPercent,
+                    packets: groupedSummary.systemPacketDetails,
+                }
+                : groupedSummary.packetType === 1
+                    ? {
+                        isCharging: groupedSummary.latestIsCharging,
+                        packets: groupedSummary.systemPacketDetails,
+                    }
+                    : groupedSummary.packetType === 2
+                        ? {
+                            statusCode: groupedSummary.latestStatusCode,
+                            statusName: groupedSummary.latestStatusName,
+                            packets: groupedSummary.systemPacketDetails,
+                        }
+                        : undefined;
+
+        console.log("[BLE TYPE SUMMARY]", {
+            type: groupedSummary.packetType,
+            mac: compactSingleOrList(groupedSummary.macList),
+            packetIds: compactSingleOrList(groupedSummary.packetIdList),
+            packetIndexes: groupedSummary.packetIndexList,
+            actualPacketCount: groupedSummary.actualPacketCount,
+            expectedPacketCount: groupedSummary.expectedPacketCount,
+            isEnoughPackets: groupedSummary.isEnoughPackets,
+            totalData,
+            systemData,
+            receiveTime: {
+                firstReceivedAt,
+                lastReceivedAt,
+                receiveDurationMs,
+            },
+        });
     };
 
     /**
@@ -486,6 +514,20 @@ export const useBleConnectDevice = (
                  */
                 const modelProbability =
                     await processSensorFusionModelDemo(modelInput);
+
+                console.log("[AI MODULE RESULT]", {
+                    modelInputNo: modelInput.modelInputNo,
+                    type5WindowNo: modelInput.type5WindowNo,
+                    type6WindowNo: modelInput.type6WindowNo,
+                    probability: modelProbability,
+                    arrayLengths: {
+                        type6: modelInput.type6Values.length,
+                        type5x: modelInput.xValues.length,
+                        type5y: modelInput.yValues.length,
+                        type5z: modelInput.zValues.length,
+                    },
+                });
+
                 await submitAtrialAlertIfNeeded(modelProbability);
 
                 if (modelInput.type6Values.length >= 1500) {
@@ -518,6 +560,12 @@ export const useBleConnectDevice = (
      * ghép chúng theo thứ tự tạo ra để thành đầu vào model.
      */
     const pairType5AndType6WindowsForModel = () => {
+        console.log("[WINDOW QUEUE BEFORE PAIR]", {
+            type5WindowQueueLength: type5SlidingWindowQueueRef.current.length,
+            type6WindowQueueLength: type6SlidingWindowQueueRef.current.length,
+            type5MiniGroupQueueLength: type5MiniGroupQueueRef.current.length,
+            type6MiniGroupQueueLength: type6MiniGroupQueueRef.current.length,
+        });
         while (
             type5SlidingWindowQueueRef.current.length > 0 &&
             type6SlidingWindowQueueRef.current.length > 0
@@ -527,7 +575,7 @@ export const useBleConnectDevice = (
 
             const type6Window =
                 type6SlidingWindowQueueRef.current.shift();
-
+            console.log("[WINDOWS PAIRED]", { type5Window, type6Window });
             if (!type5Window || !type6Window) {
                 continue;
             }
@@ -695,6 +743,21 @@ export const useBleConnectDevice = (
 
         const packetsOfFinishedBatch = [...activeBatch.packets];
 
+        const groupedType0 = buildGroupedPacketSummary(
+            packetsOfFinishedBatch,
+            0
+        );
+
+        const groupedType1 = buildGroupedPacketSummary(
+            packetsOfFinishedBatch,
+            1
+        );
+
+        const groupedType2 = buildGroupedPacketSummary(
+            packetsOfFinishedBatch,
+            2
+        );
+
         const groupedType5 = buildGroupedPacketSummary(
             packetsOfFinishedBatch,
             5
@@ -711,15 +774,28 @@ export const useBleConnectDevice = (
         const type6MiniGroups =
             buildType6MiniGroupsFromPackets(packetsOfFinishedBatch);
 
-        logBleTypeCollectionSummary(
-            packetsOfFinishedBatch,
-            groupedType5
-        );
+        // logBleTypeCollectionSummary(
+        //     packetsOfFinishedBatch,
+        //     groupedType5
+        // );
 
-        logBleTypeCollectionSummary(
-            packetsOfFinishedBatch,
-            groupedType6
-        );
+        // logBleTypeCollectionSummary(
+        //     packetsOfFinishedBatch,
+        //     groupedType6
+        // );
+
+        [
+            groupedType0,
+            groupedType1,
+            groupedType2,
+            groupedType5,
+            groupedType6,
+        ].forEach((groupedSummary) => {
+            logBleTypeCollectionSummary(
+                packetsOfFinishedBatch,
+                groupedSummary
+            );
+        });
 
         appendType5MiniGroupsAndBuildWindows(type5MiniGroups);
         appendType6MiniGroupsAndBuildWindows(type6MiniGroups);

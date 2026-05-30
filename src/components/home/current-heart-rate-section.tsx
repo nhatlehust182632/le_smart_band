@@ -1,5 +1,5 @@
-import { heartRateHook } from "@/hooks/heartRate";
 import { alertService } from "@/api/services/alert.service";
+import { heartRateHook } from "@/hooks/heartRate";
 import { FontAwesome5, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";

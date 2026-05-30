@@ -25,6 +25,36 @@ type HeartRateTimes = {
   bpm: number;
   time_hhmm: string;
 }[];
+
+type AtrialFibrillationAlert = {
+  date: string;
+  time: string;
+  message: string;
+};
+
+const atrialFibrillationAlerts: AtrialFibrillationAlert[] = [
+  {
+    date: "2026-05-30",
+    time: "16:44:00",
+    message: "Cảnh báo bất thường",
+  },
+  {
+    date: "2026-05-30",
+    time: "16:44:30",
+    message: "Cảnh báo bất thường",
+  },
+  {
+    date: "2026-05-30",
+    time: "16:44:30",
+    message: "Cảnh báo bất thường",
+  },
+  {
+    date: "2026-05-30",
+    time: "16:44:30",
+    message: "Cảnh báo bất thường",
+  },
+];
+
 export default function HeartRateScreen() {
   const [loading, setLoading] = useState(false);
   const [heartRate, setHeartRate] = useState<HeartRate | null>(null);
@@ -130,33 +160,53 @@ export default function HeartRateScreen() {
   const paddingTop = 20;
   const paddingBottom = 30; // chừa chỗ cho thời gian bên dưới
 
-  console.log("heartRateChartData: " + heartRateChartData);
+  console.log("heartRateChartData:", heartRateChartData);
 
-  const bpmValues = heartRateChartData?.map((item) => item?.bpm);
+  const validHeartRateChartData = heartRateChartData.filter((item) => {
+    const bpm = Number(item?.bpm);
+    return Number.isFinite(bpm);
+  });
+
+  const bpmValues = validHeartRateChartData.map((item) => Number(item.bpm));
 
   // Có thể fix cứng range để chart ổn định hơn
-  const maxValue = bpmValues ? Math.max(...bpmValues, 160) : 0;
-  const minValue = Math.min(...bpmValues, 60);
+  const maxValue = bpmValues.length > 0 ? Math.max(...bpmValues, 160) : 160;
+  const minValue = bpmValues.length > 0 ? Math.min(...bpmValues, 60) : 60;
 
   const getX = (index: number) => {
+    const length = validHeartRateChartData.length;
+
+    if (length <= 1) {
+      return chartWidth / 2;
+    }
+
     return (
       paddingLeft +
-      (index * (chartWidth - paddingLeft - paddingRight)) /
-      (heartRateChartData?.length - 1)
+      (index * (chartWidth - paddingLeft - paddingRight)) / (length - 1)
     );
   };
 
   const getY = (value: number) => {
+    const bpm = Number(value);
+
+    if (!Number.isFinite(bpm)) {
+      return chartHeight - paddingBottom;
+    }
+
+    if (maxValue === minValue) {
+      return chartHeight / 2;
+    }
+
     return (
       chartHeight -
       paddingBottom -
-      ((value - minValue) / (maxValue - minValue)) *
+      ((bpm - minValue) / (maxValue - minValue)) *
       (chartHeight - paddingTop - paddingBottom)
     );
   };
 
-  const points = heartRateChartData
-    .map((item, index) => `${getX(index)},${getY(item.bpm)}`)
+  const points = validHeartRateChartData
+    .map((item, index) => `${getX(index)},${getY(Number(item.bpm))}`)
     .join(" ");
 
   // Các mốc trục Y
@@ -185,16 +235,20 @@ export default function HeartRateScreen() {
   }, [user?.id, timeRange]);
 
   const getVisibleIndexes = (length: number, labelCount: number) => {
-    const step = length / labelCount;
+    if (length <= 0) return [];
+    if (length === 1) return [0];
+
+    const count = Math.min(length, labelCount);
+    const step = (length - 1) / (count - 1);
     const indexes: number[] = [];
 
-    for (let i = 0; i < labelCount; i++) {
-      indexes.push(Math.floor(i * step));
+    for (let i = 0; i < count; i++) {
+      indexes.push(Math.round(i * step));
     }
 
     return indexes;
   };
-  const visibleIndexes = getVisibleIndexes(heartRateChartData.length, 6);
+  const visibleIndexes = getVisibleIndexes(validHeartRateChartData.length, 6);
   return (
     <SafeAreaView style={localStyles.safeRed}>
       <StatusBar barStyle="light-content" />
@@ -243,124 +297,132 @@ export default function HeartRateScreen() {
             </View>
 
             <View style={localStyles.chartContainer}>
-              <Svg width={chartWidth} height={chartHeight}>
-                {/* Trục Y */}
-                <Line
-                  x1={paddingLeft}
-                  y1={paddingTop}
-                  x2={paddingLeft}
-                  y2={chartHeight - paddingBottom}
-                  stroke="#D0D7DE"
-                  strokeWidth="1"
-                />
-
-                {/* Trục X */}
-                <Line
-                  x1={paddingLeft}
-                  y1={chartHeight - paddingBottom}
-                  x2={chartWidth - paddingRight}
-                  y2={chartHeight - paddingBottom}
-                  stroke="#D0D7DE"
-                  strokeWidth="1"
-                />
-
-                {/* Grid ngang + nhãn trục Y */}
-                {yLabels.map((val, index) => {
-                  const y = getY(val);
-                  return (
-                    <React.Fragment key={index}>
-                      <Line
-                        x1={paddingLeft}
-                        y1={y}
-                        x2={chartWidth - paddingRight}
-                        y2={y}
-                        stroke="#EAECEF"
-                        strokeWidth="1"
-                      />
-                      <SvgText x={8} y={y + 4} fontSize="11" fill="#666">
-                        {val}
-                      </SvgText>
-                    </React.Fragment>
-                  );
-                })}
-
-                {/* Đường biểu đồ */}
-                <Polyline
-                  points={points}
-                  fill="none"
-                  stroke="#E53935"
-                  strokeWidth="3"
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                />
-
-                {/* Chấm tại từng điểm */}
-                {heartRateChartData.map((item, index) => (
-                  <Circle
-                    key={index}
-                    cx={getX(index)}
-                    cy={getY(item.bpm)}
-                    r="4"
-                    fill="#E53935"
+              {validHeartRateChartData.length > 0 ? (
+                <Svg width={chartWidth} height={chartHeight}>
+                  {/* Trục Y */}
+                  <Line
+                    x1={paddingLeft}
+                    y1={paddingTop}
+                    x2={paddingLeft}
+                    y2={chartHeight - paddingBottom}
+                    stroke="#D0D7DE"
+                    strokeWidth="1"
                   />
-                ))}
 
-                {/* Giá trị BPM tại từng điểm */}
-                {heartRateChartData.map((item, index) => (
-                  <SvgText
-                    key={`value-${index}`}
-                    x={getX(index) - 10}
-                    y={getY(item.bpm) - 10}
-                    fontSize="10"
-                    fill="#E53935"
-                    fontWeight="bold"
-                  >
-                    {item.bpm}
-                  </SvgText>
-                ))}
+                  {/* Trục X */}
+                  <Line
+                    x1={paddingLeft}
+                    y1={chartHeight - paddingBottom}
+                    x2={chartWidth - paddingRight}
+                    y2={chartHeight - paddingBottom}
+                    stroke="#D0D7DE"
+                    strokeWidth="1"
+                  />
 
-                {/* Nhãn trục X - thời gian */}
-                {/* Tick trên trục X: tick nhỏ cho mọi điểm, tick dài cho mốc chính */}
-                {heartRateChartData.map((item, index) => {
-                  const x = getX(index);
-                  const yAxis = chartHeight - paddingBottom;
-                  const isMajor = visibleIndexes.includes(index);
+                  {/* Grid ngang + nhãn trục Y */}
+                  {yLabels.map((val, index) => {
+                    const y = getY(val);
+                    return (
+                      <React.Fragment key={index}>
+                        <Line
+                          x1={paddingLeft}
+                          y1={y}
+                          x2={chartWidth - paddingRight}
+                          y2={y}
+                          stroke="#EAECEF"
+                          strokeWidth="1"
+                        />
+                        <SvgText x={8} y={y + 4} fontSize="11" fill="#666">
+                          {val}
+                        </SvgText>
+                      </React.Fragment>
+                    );
+                  })}
 
-                  return (
-                    <Line
-                      key={`tick-${index}`}
-                      x1={x}
-                      y1={yAxis}
-                      x2={x}
-                      y2={yAxis + (isMajor ? 8 : 4)}
-                      stroke={isMajor ? "#7A7A7A" : "#C8CDD3"}
-                      strokeWidth={isMajor ? "1.5" : "1"}
+                  {/* Đường biểu đồ */}
+                  {validHeartRateChartData.length > 1 && (
+                    <Polyline
+                      points={points}
+                      fill="none"
+                      stroke="#E53935"
+                      strokeWidth="3"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
                     />
-                  );
-                })}
-                {/* Tick trên trục X */}
-                {heartRateChartData.map((item, index) => {
-                  if (!visibleIndexes.includes(index)) return null;
+                  )}
 
-                  const x = getX(index);
+                  {/* Chấm tại từng điểm */}
+                  {validHeartRateChartData.map((item, index) => (
+                    <Circle
+                      key={index}
+                      cx={getX(index)}
+                      cy={getY(Number(item.bpm))}
+                      r="4"
+                      fill="#E53935"
+                    />
+                  ))}
 
-                  return (
+                  {/* Giá trị BPM tại từng điểm */}
+                  {validHeartRateChartData.map((item, index) => (
                     <SvgText
-                      key={`time-${index}`}
-                      x={x}
-                      y={chartHeight - 8}
+                      key={`value-${index}`}
+                      x={getX(index) - 10}
+                      y={getY(Number(item.bpm)) - 10}
                       fontSize="10"
-                      fill="#666"
-                      textAnchor="middle"
+                      fill="#E53935"
+                      fontWeight="bold"
                     >
-                      {item.time_hhmm}
+                      {Number(item.bpm)}
                     </SvgText>
-                  );
-                })}
-              </Svg>
+                  ))}
+
+                  {/* Nhãn trục X - thời gian */}
+                  {/* Tick trên trục X: tick nhỏ cho mọi điểm, tick dài cho mốc chính */}
+                  {validHeartRateChartData.map((item, index) => {
+                    const x = getX(index);
+                    const yAxis = chartHeight - paddingBottom;
+                    const isMajor = visibleIndexes.includes(index);
+
+                    return (
+                      <Line
+                        key={`tick-${index}`}
+                        x1={x}
+                        y1={yAxis}
+                        x2={x}
+                        y2={yAxis + (isMajor ? 8 : 4)}
+                        stroke={isMajor ? "#7A7A7A" : "#C8CDD3"}
+                        strokeWidth={isMajor ? "1.5" : "1"}
+                      />
+                    );
+                  })}
+                  {/* Tick trên trục X */}
+                  {validHeartRateChartData.map((item, index) => {
+                    if (!visibleIndexes.includes(index)) return null;
+
+                    const x = getX(index);
+
+                    return (
+                      <SvgText
+                        key={`time-${index}`}
+                        x={x}
+                        y={chartHeight - 8}
+                        fontSize="10"
+                        fill="#666"
+                        textAnchor="middle"
+                      >
+                        {item.time_hhmm}
+                      </SvgText>
+                    );
+                  })}
+                </Svg>
+              ) : (
+                <Text style={{ color: "#666", marginVertical: 24 }}>
+                  Chưa có dữ liệu biểu đồ
+                </Text>
+              )}
             </View>
 
-            <View style={localStyles.chartLabels}>
+            {/* <View style={localStyles.chartLabels}>
               {heartRateChartData.map((item, index) => (
                 <Circle
                   key={index}
@@ -370,7 +432,7 @@ export default function HeartRateScreen() {
                   fill="#E53935"
                 />
               ))}
-            </View>
+            </View> */}
           </View>
 
           <View style={styles.card}>
@@ -404,7 +466,7 @@ export default function HeartRateScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.alertTitle}>Phân tích AI</Text>
               <Text style={styles.alertText}>
-                Dữ liệu hiện tại cho thấy nhịp tim tăng cao bất thường. Cần tiếp
+                Dữ liệu hiện tại cho thấy nhịp tim bất thường. Cần tiếp
                 tục theo dõi và gửi cảnh báo cho người quan sát nếu vượt ngưỡng
                 trong thời gian dài.
               </Text>
@@ -437,6 +499,31 @@ export default function HeartRateScreen() {
               <View style={styles.historyItem}>
                 <Text style={styles.historyTime}>--:--</Text>
                 <Text style={styles.historyValue}>Chưa có dữ liệu</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.card}>
+            <View style={styles.cardTitleRow}>
+              <Ionicons name="warning-outline" size={22} color="#D32F2F" />
+              <Text style={styles.cardTitle}>Danh sách cảnh báo rung nhĩ</Text>
+            </View>
+
+            {atrialFibrillationAlerts.length > 0 ? (
+              atrialFibrillationAlerts.map((item, index) => (
+                <View
+                  key={`atrial-alert-${index}`}
+                  style={localStyles.alertRow}
+                >
+                  <Text style={localStyles.alertDate}>{item.date}</Text>
+                  <Text style={localStyles.alertTime}>{item.time}</Text>
+                  <Text style={localStyles.alertMessage}>{item.message}</Text>
+                </View>
+              ))
+            ) : (
+              <View style={styles.historyItem}>
+                <Text style={styles.historyTime}>--:--</Text>
+                <Text style={styles.historyValue}>Chưa có cảnh báo bất thường</Text>
               </View>
             )}
           </View>
@@ -489,5 +576,34 @@ const localStyles = StyleSheet.create({
     fontWeight: "700",
     color: "#1B2A41",
     marginRight: 50,
+  },
+
+  alertRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ECEFF1",
+  },
+
+  alertDate: {
+    flex: 1.1,
+    fontSize: 13,
+    color: "#455A64",
+    fontWeight: "600",
+  },
+
+  alertTime: {
+    flex: 0.9,
+    fontSize: 13,
+    color: "#455A64",
+    fontWeight: "600",
+  },
+
+  alertMessage: {
+    flex: 1.4,
+    fontSize: 13,
+    color: "#D32F2F",
+    fontWeight: "700",
   },
 });

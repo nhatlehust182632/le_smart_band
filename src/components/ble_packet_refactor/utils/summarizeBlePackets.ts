@@ -42,9 +42,12 @@ const getRetainedType5AxisValues = (
 
 export const buildGroupedPacketSummary = (
     packets: BlePacketItem[],
-    packetType: 5 | 6
+    packetType: 0 | 1 | 2 | 5 | 6
 ): GroupedPacketSummary => {
-    const expectedPacketCount = packetType === 5 ? 19 : 12;
+    const expectedPacketCount =
+        packetType === 5 ? 19 :
+            packetType === 6 ? 12 :
+                0;
 
     const filteredPackets = packets
         .filter((packet) => {
@@ -79,6 +82,77 @@ export const buildGroupedPacketSummary = (
     const totalPayloadByteLength = filteredPackets.reduce((sum, packet) => {
         return sum + (packet.data.payload?.actualPayloadByteLength ?? 0);
     }, 0);
+
+    if (packetType === 0 || packetType === 1 || packetType === 2) {
+        const systemPacketDetails = filteredPackets.map((packet) => {
+            const payload = packet.data.payload;
+
+            return {
+                packetId: packet.data.header?.packetId.dec ?? null,
+                packetIndex: packet.data.header?.packetIndex.dec ?? null,
+                mac: packet.data.mac?.address ?? null,
+                receivedAt: packet.receivedAt,
+
+                payloadByteLength:
+                    payload?.actualPayloadByteLength ??
+                    payload?.payloadByteLength ??
+                    0,
+
+                rawBytes: payload?.rawBytes ?? [],
+
+                batteryPercent: payload?.batteryPercent,
+                chargingRawValue: payload?.chargingRawValue,
+                isCharging: payload?.isCharging,
+                statusCode: payload?.statusCode,
+                statusName: payload?.statusName,
+                statusPayload: payload?.statusPayload,
+            };
+        });
+
+        const latestSystemPacket =
+            systemPacketDetails.length > 0
+                ? systemPacketDetails[systemPacketDetails.length - 1]
+                : null;
+
+        return {
+            packetType,
+
+            expectedPacketCount,
+            actualPacketCount: filteredPackets.length,
+            isEnoughPackets: filteredPackets.length > 0,
+
+            macList,
+            macCount: macList.length,
+
+            packetIdList,
+            packetIndexList,
+
+            totalDataCount: filteredPackets.length,
+            totalPayloadByteLength,
+
+            systemPacketDetails,
+
+            latestBatteryPercent:
+                packetType === 0
+                    ? latestSystemPacket?.batteryPercent ?? null
+                    : null,
+
+            latestIsCharging:
+                packetType === 1
+                    ? latestSystemPacket?.isCharging ?? null
+                    : null,
+
+            latestStatusCode:
+                packetType === 2
+                    ? latestSystemPacket?.statusCode ?? null
+                    : null,
+
+            latestStatusName:
+                packetType === 2
+                    ? latestSystemPacket?.statusName ?? null
+                    : null,
+        };
+    }
 
     if (packetType === 5) {
         const retainedAxisValues = filteredPackets.map((packet) => {

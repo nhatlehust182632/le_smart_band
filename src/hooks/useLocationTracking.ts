@@ -293,20 +293,20 @@ export function useLocationTracking(userId: string | undefined) {
                 lastSavedLocation?.place_key
             );
 
-            console.log("[LOCATION COMPARE]", {
-                current_place_key: currentPlaceKey,
-                last_saved_place_key: lastSavedPlaceKey || null,
-                should_save:
-                    !lastSavedLocation || lastSavedPlaceKey !== currentPlaceKey,
-            });
+            // console.log("[LOCATION COMPARE]", {
+            //     current_place_key: currentPlaceKey,
+            //     last_saved_place_key: lastSavedPlaceKey || null,
+            //     should_save:
+            //         !lastSavedLocation || lastSavedPlaceKey !== currentPlaceKey,
+            // });
 
             const shouldSaveLocation =
                 !lastSavedLocation || lastSavedPlaceKey !== currentPlaceKey;
 
             if (!shouldSaveLocation) {
-                console.log("Vị trí trùng place_key, không lưu mới", {
-                    place_key: currentPlaceKey,
-                });
+                // console.log("Vị trí trùng place_key, không lưu mới", {
+                //     place_key: currentPlaceKey,
+                // });
                 return;
             }
 
@@ -317,10 +317,10 @@ export function useLocationTracking(userId: string | undefined) {
             //     place_key: currentPlaceKey,
             // });
 
-            console.log("Đã lưu vị trí mới", {
-                old_place_key: lastSavedPlaceKey || null,
-                new_place_key: currentPlaceKey,
-            });
+            // console.log("Đã lưu vị trí mới", {
+            //     old_place_key: lastSavedPlaceKey || null,
+            //     new_place_key: currentPlaceKey,
+            // });
         } catch (err) {
             console.error("Lỗi cập nhật vị trí:", err);
         } finally {

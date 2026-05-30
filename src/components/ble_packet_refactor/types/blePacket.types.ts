@@ -6,7 +6,7 @@ export type ReadTarget = {
 };
 
 export type ParsedBlePayload = {
-    packetName?: "TYPE_5" | "TYPE_6";
+    packetName?: "TYPE_0" | "TYPE_1" | "TYPE_2" | "TYPE_5" | "TYPE_6";
     status?: string;
 
     expectedPayloadByteLength?: number;
@@ -15,6 +15,18 @@ export type ParsedBlePayload = {
 
     bytesPerValue?: number;
     valueCount?: number;
+
+    // TYPE 0 - pin
+    batteryPercent?: number;
+
+    // TYPE 1 - trạng thái sạc
+    chargingRawValue?: number;
+    isCharging?: boolean;
+
+    // TYPE 2 - trạng thái gói tin / thiết bị
+    statusCode?: number;
+    statusName?: string;
+    statusPayload?: number[];
 
     // TYPE 6
     values?: number[];
@@ -81,8 +93,25 @@ export type BlePacketItem = {
     data: ParsedBlePacket;
 };
 
+export type BleSystemPacketDetail = {
+    packetId: number | null;
+    packetIndex: number | null;
+    mac: string | null;
+    receivedAt: string;
+
+    payloadByteLength: number;
+    rawBytes: number[];
+
+    batteryPercent?: number;
+    chargingRawValue?: number;
+    isCharging?: boolean;
+    statusCode?: number;
+    statusName?: string;
+    statusPayload?: number[];
+};
+
 export type GroupedPacketSummary = {
-    packetType: 5 | 6;
+    packetType: 0 | 1 | 2 | 5 | 6;
 
     expectedPacketCount: number;
     actualPacketCount: number;
@@ -96,6 +125,14 @@ export type GroupedPacketSummary = {
 
     totalDataCount: number;
     totalPayloadByteLength: number;
+
+    // TYPE 0/1/2
+    systemPacketDetails?: BleSystemPacketDetail[];
+
+    latestBatteryPercent?: number | null;
+    latestIsCharging?: boolean | null;
+    latestStatusCode?: number | null;
+    latestStatusName?: string | null;
 
     // TYPE 6
     mergedValues?: number[];

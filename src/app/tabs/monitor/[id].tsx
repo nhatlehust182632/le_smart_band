@@ -20,48 +20,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { styles } from "../../../styles/appStyles";
 
-const monitorDetails: Record<string, any> = {
-  "001": {
-    name: "Nguyễn Văn Nam",
-    age: 67,
-    relation: "Cha",
-    currentHeartRate: 148,
-    heartStatus: "Cảnh báo",
-    isConnected: true,
-    battery: 78,
-    lastSync: "2 phút trước",
-    lastLocation: "Công viên Thống Nhất, Hà Nội",
-    locationUpdatedAt: "10:32",
-    riskLevel: "Cao",
-  },
-  "002": {
-    name: "Trần Thị Lan",
-    age: 63,
-    relation: "Mẹ",
-    currentHeartRate: 78,
-    heartStatus: "Bình thường",
-    isConnected: true,
-    battery: 90,
-    lastSync: "1 phút trước",
-    lastLocation: "Nhà riêng",
-    locationUpdatedAt: "10:35",
-    riskLevel: "Thấp",
-  },
-  "003": {
-    name: "Phạm Quốc Minh",
-    age: 72,
-    relation: "Bệnh nhân",
-    currentHeartRate: 95,
-    heartStatus: "Theo dõi",
-    isConnected: false,
-    battery: 20,
-    lastSync: "15 phút trước",
-    lastLocation: "Bệnh viện Bạch Mai",
-    locationUpdatedAt: "10:10",
-    riskLevel: "Trung bình",
-  },
-};
-
 type HeartRate = {
   name: string,
   age: string,
@@ -74,7 +32,8 @@ type HeartRate = {
   riskLevel: string,
   locationUpdatedAt: string,
   lastSync: string,
-  battery: string
+  battery: string,
+  deviceName: string,
 };
 
 export default function MonitorDetailScreen() {
@@ -217,7 +176,7 @@ export default function MonitorDetailScreen() {
 
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Tên thiết bị</Text>
-              <Text style={styles.infoValue}>VSK Smart Band A1</Text>
+              <Text style={styles.infoValue}>{monitorId?.deviceName}</Text>
             </View>
 
             <View style={styles.infoItem}>
@@ -276,14 +235,14 @@ export default function MonitorDetailScreen() {
               <Text style={styles.infoValue}>{monitorId?.locationUpdatedAt}</Text>
             </View>
 
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={localStyles.actionButton}
               onPress={() => router.push("/tabs/location")}
             >
               <Text style={localStyles.actionButtonText}>
                 Mở màn hình định vị
               </Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </View>
 
           <TouchableOpacity
