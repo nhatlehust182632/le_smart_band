@@ -25,6 +25,10 @@ export const monitorServices = {
         return monitorSources.approveRequest(id, requestId);
     },
 
+    rejectRequest(id: string, requestId: string) {
+        return monitorSources.rejectRequest(id, requestId);
+    },
+
     sendFollowRequestByPhone(id: string, phone: string) {
         return monitorSources.sendFollowRequestByPhone({ id, phone });
     },

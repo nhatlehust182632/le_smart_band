@@ -139,6 +139,21 @@ export function monitorHook() {
         }
     };
 
+    const rejectRequest = async (userId: string, requestId: string) => {
+        if (loading) return;
+        if (!userId || !requestId) {
+            throw new Error("Lỗi chức năng");
+        }
+        try {
+            setLoading(true);
+            const response = await monitorServices.rejectRequest(userId, requestId);
+
+            return response;
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return {
         getListMonitors,
         getMonitorId,
@@ -149,5 +164,6 @@ export function monitorHook() {
         stopMonitoring,
         removeMonitorFromMe,
         approveRequest,
+        rejectRequest,
     };
 }

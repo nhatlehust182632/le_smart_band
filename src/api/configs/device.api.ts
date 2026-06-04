@@ -72,4 +72,35 @@ export const deviceApis: Record<string, ApiConfig> = {
     token: "USER_ACCESS_TOKEN",
     transformResponse: (data) => data?.data || data,
   },
+
+  postSaveBatteryLog: {
+    name: "postSaveBatteryLog",
+    baseUrl: ENV.USER_API_BASE_URL,
+    endpoint: "/api/device/saveBatteryLog",
+    method: "POST",
+    timeout: ENV.DEFAULT_TIMEOUT,
+    retries: 2,
+    authType: "bearer",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    token: "USER_ACCESS_TOKEN",
+    transformResponse: (data) => data?.data || data,
+  },
+
+  postDisconnectActiveDevice: {
+    name: "postDisconnectActiveDevice",
+    baseUrl: ENV.USER_API_BASE_URL,
+    endpoint: "/api/device/disconnectActiveDevice",
+    method: "POST",
+    timeout: ENV.DEFAULT_TIMEOUT,
+    retries: 2,
+    authType: "bearer",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    token: "USER_ACCESS_TOKEN",
+    transformResponse: (data) => data?.data || data,
+  },
+
 };

@@ -66,6 +66,25 @@ import {
     type BleTrackedBatch,
 } from "../utils/packetBatchTracker";
 
+
+const manualDisconnectBlockedDeviceIds = new Set<string>();
+
+const blockAutoConnectForDevice = (deviceId?: string | null) => {
+    if (deviceId) {
+        manualDisconnectBlockedDeviceIds.add(deviceId);
+    }
+};
+
+const allowAutoConnectForDevice = (deviceId?: string | null) => {
+    if (deviceId) {
+        manualDisconnectBlockedDeviceIds.delete(deviceId);
+    }
+};
+
+const isAutoConnectBlocked = (deviceId?: string | null) => {
+    return !!deviceId && manualDisconnectBlockedDeviceIds.has(deviceId);
+};
+
 /**
  * Hook điều phối toàn bộ nghiệp vụ BLE:
  *
@@ -182,6 +201,8 @@ export const useBleConnectDevice = (
         device_id?: string;
     } | null>(null);
     const type6MacAddressRef = useRef<string | null>(null);
+    const latestBatteryPercentRef = useRef<number | null>(null);
+    const latestIsChargingRef = useRef<number>(0);
 
     /**
      * Reset batch packet đang active.
@@ -215,6 +236,8 @@ export const useBleConnectDevice = (
 
         lastFinalizedBatchRef.current = null;
         type6MacAddressRef.current = null;
+        latestBatteryPercentRef.current = null;
+        latestIsChargingRef.current = 0;
     };
 
 
@@ -371,6 +394,12 @@ export const useBleConnectDevice = (
         userRequestedDisconnectRef.current = true;
         connectionActionIdRef.current += 1;
 
+        const userId = currentUserIdRef.current ?? autoConnectUserId ?? null;
+        const disconnectedDeviceId =
+            deviceRef.current?.id ?? connectedDevice?.id ?? autoConnectDeviceId ?? null;
+
+        blockAutoConnectForDevice(disconnectedDeviceId);
+
         try {
             stopAll();
             stopDemoBlePacketTimers(demoPacketTimersRef.current);
@@ -393,7 +422,23 @@ export const useBleConnectDevice = (
             deviceRef.current = null;
             setConnectedDevice(null);
             setStatus("Đã ngắt kết nối");
+
+            if (userId) {
+                void devicesSource.disconnectActiveDevice(userId);
+            }
         } catch {
+        }
+    };
+
+    const closeScanModal = () => {
+        connectionActionIdRef.current += 1;
+        stopAll();
+        setScanModalVisible(false);
+
+        if (!deviceRef.current && !connectedDevice) {
+            userRequestedDisconnectRef.current = true;
+            blockAutoConnectForDevice(autoConnectDeviceId);
+            setStatus("Chưa kết nối");
         }
     };
 
@@ -409,12 +454,33 @@ export const useBleConnectDevice = (
                 idUser,
                 bpm,
                 type6MacAddressRef.current ?? undefined,
-                connectedUserDeviceRef.current?.device_id,
+                connectedUserDeviceRef.current?.user_device_id,
             );
 
             // console.log("[HEART RATE ACTIVE SAVED]", response);
         } catch (error) {
             console.warn("[HEART RATE ACTIVE SAVE FAILED]", error);
+        }
+    };
+
+    const submitBatteryLogIfNeeded = async () => {
+        const userId = currentUserIdRef.current;
+        const userDeviceId = connectedUserDeviceRef.current?.user_device_id;
+        const batteryPercent = latestBatteryPercentRef.current;
+
+        if (!userId || !userDeviceId || batteryPercent == null) {
+            return;
+        }
+
+        try {
+            await devicesSource.saveBatteryLog(
+                userId,
+                userDeviceId,
+                batteryPercent,
+                latestIsChargingRef.current,
+            );
+        } catch (error) {
+            console.warn("[BATTERY LOG SAVE FAILED]", error);
         }
     };
 
@@ -575,7 +641,7 @@ export const useBleConnectDevice = (
 
             const type6Window =
                 type6SlidingWindowQueueRef.current.shift();
-            console.log("[WINDOWS PAIRED]", { type5Window, type6Window });
+            // console.log("[WINDOWS PAIRED]", { type5Window, type6Window });
             if (!type5Window || !type6Window) {
                 continue;
             }
@@ -767,6 +833,16 @@ export const useBleConnectDevice = (
             packetsOfFinishedBatch,
             6
         );
+
+        if (typeof groupedType0.latestBatteryPercent === "number") {
+            latestBatteryPercentRef.current = groupedType0.latestBatteryPercent;
+        }
+
+        if (typeof groupedType1.latestIsCharging === "boolean") {
+            latestIsChargingRef.current = groupedType1.latestIsCharging ? 1 : 0;
+        }
+
+        void submitBatteryLogIfNeeded();
 
         const type5MiniGroups =
             buildType5MiniGroupsFromPackets(packetsOfFinishedBatch);
@@ -994,7 +1070,7 @@ export const useBleConnectDevice = (
      * Quét thiết bị BLE.
      */
     const startScan = async () => {
-        userRequestedDisconnectRef.current = false;
+        userRequestedDisconnectRef.current = true;
         connectionActionIdRef.current += 1;
 
         const granted = await requestPermissions();
@@ -1062,9 +1138,20 @@ export const useBleConnectDevice = (
     const startReceivingRealBleData = async (connected: Device) => {
         const services = await connected.services();
         const readableTargets: ReadTarget[] = [];
+        console.log("[BLE REAL SERVICES]", services.map((service) => service.uuid));
         for (const service of services) {
             const characteristics = await service.characteristics();
-
+            console.log("[BLE REAL CHARACTERISTICS]", {
+                serviceUUID: service.uuid,
+                characteristics: characteristics.map((item) => ({
+                    uuid: item.uuid,
+                    isReadable: item.isReadable,
+                    isWritableWithResponse: item.isWritableWithResponse,
+                    isWritableWithoutResponse: item.isWritableWithoutResponse,
+                    isNotifiable: item.isNotifiable,
+                    isIndicatable: item.isIndicatable,
+                })),
+            });
             for (const characteristic of characteristics) {
                 if (
                     characteristic.isNotifiable ||
@@ -1078,12 +1165,12 @@ export const useBleConnectDevice = (
                                 }
 
                                 if (monitoredCharacteristic?.value) {
-                                    // console.log("[BLE RECEIVE]", {
-                                    //     source: "NOTIFY",
-                                    //     serviceUUID: service.uuid,
-                                    //     charUUID: characteristic.uuid,
-                                    //     value: monitoredCharacteristic.value,
-                                    // });
+                                    console.log("[BLE RECEIVE]", {
+                                        source: "NOTIFY",
+                                        serviceUUID: service.uuid,
+                                        charUUID: characteristic.uuid,
+                                        value: monitoredCharacteristic.value,
+                                    });
                                     void printData(
                                         "NOTIFY",
                                         service.uuid,
@@ -1113,12 +1200,12 @@ export const useBleConnectDevice = (
                             );
 
                         if (readNow?.value) {
-                            // console.log("[BLE RECEIVE]", {
-                            //     source: "READ_NOW",
-                            //     serviceUUID: service.uuid,
-                            //     charUUID: characteristic.uuid,
-                            //     value: readNow.value,
-                            // });
+                            console.log("[BLE RECEIVE]", {
+                                source: "READ_NOW",
+                                serviceUUID: service.uuid,
+                                charUUID: characteristic.uuid,
+                                value: readNow.value,
+                            });
 
                             void printData(
                                 "READ_NOW",
@@ -1150,12 +1237,12 @@ export const useBleConnectDevice = (
                             );
 
                         if (characteristic?.value) {
-                            // console.log("[BLE RECEIVE]", {
-                            //     source: "POLL",
-                            //     serviceUUID: target.serviceUUID,
-                            //     charUUID: target.charUUID,
-                            //     value: characteristic.value,
-                            // });
+                            console.log("[BLE RECEIVE]", {
+                                source: "POLL",
+                                serviceUUID: target.serviceUUID,
+                                charUUID: target.charUUID,
+                                value: characteristic.value,
+                            });
 
                             void printData(
                                 "POLL",
@@ -1213,14 +1300,17 @@ export const useBleConnectDevice = (
         }
 
         if (USE_DEMO_BLE_DATA) {
+            console.log("[BLE MODE] DEMO DATA ENABLED");
             runSelectedDemoBlePacketSession();
             return;
         }
+        console.log("[BLE MODE] REAL DEVICE DATA ENABLED");
 
         await startReceivingRealBleData(connected);
     };
 
     const connectDevice = async (device: Device, userId?: string) => {
+        allowAutoConnectForDevice(device.id);
         userRequestedDisconnectRef.current = false;
         const actionId = ++connectionActionIdRef.current;
 
@@ -1256,7 +1346,7 @@ export const useBleConnectDevice = (
     };
 
     const connectDeviceById = async (deviceId: string, userId?: string) => {
-        if (isAutoConnectingRef.current) {
+        if (isAutoConnectingRef.current || isAutoConnectBlocked(deviceId)) {
             return;
         }
 
@@ -1317,7 +1407,7 @@ export const useBleConnectDevice = (
     useEffect(() => {
         if (lastAutoConnectDeviceIdRef.current !== autoConnectDeviceId) {
             lastAutoConnectDeviceIdRef.current = autoConnectDeviceId;
-            userRequestedDisconnectRef.current = false;
+            userRequestedDisconnectRef.current = isAutoConnectBlocked(autoConnectDeviceId);
         }
 
         // console.log("autoConnectDeviceId", autoConnectDeviceId);
@@ -1328,16 +1418,19 @@ export const useBleConnectDevice = (
             autoConnectDeviceId &&
             !connectedDevice &&
             !scanning &&
+            !scanModalVisible &&
             !isAutoConnectingRef.current &&
-            !userRequestedDisconnectRef.current
+            !userRequestedDisconnectRef.current &&
+            !isAutoConnectBlocked(autoConnectDeviceId)
         ) {
             void connectDeviceById(autoConnectDeviceId, autoConnectUserId);
         }
-    }, [autoConnectDeviceId, autoConnectUserId, connectedDevice, scanning]);
+    }, [autoConnectDeviceId, autoConnectUserId, connectedDevice, scanning, scanModalVisible]);
 
     return {
         scanModalVisible,
         setScanModalVisible,
+        closeScanModal,
         devices,
         scanning,
         status,

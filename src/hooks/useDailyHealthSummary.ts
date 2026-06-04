@@ -1,8 +1,8 @@
-import { stepService } from "@/api/services/step.service";
 import { alertService } from "@/api/services/alert.service";
+import { stepService } from "@/api/services/step.service";
 import { useAuth } from "@/context/AuthContext";
 import { Pedometer } from "expo-sensors";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 export interface DailyHealthSummary {
     steps: number;
@@ -97,14 +97,14 @@ export function useDailyHealthSummary() {
         }
     }, [user?.id]);
 
-    useEffect(() => {
-        fetchDailySummary();
-    }, [fetchDailySummary]);
+    // useEffect(() => {
+    //     fetchDailySummary();
+    // }, [fetchDailySummary]);
 
     return {
         summary,
         loading,
         error,
-        refreshSummary: fetchDailySummary,
+        // refreshSummary: fetchDailySummary,
     };
 }

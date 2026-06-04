@@ -97,7 +97,7 @@ export function MonitoredTab({ userId }: MonitoredTabProps) {
                             </Text>
                             <View style={localStyles.inlineRow}>
                                 <MaterialCommunityIcons name="heart-pulse" size={16} color="#E53935" />
-                                <Text style={localStyles.inlineText}>{person.heartRate} BPM</Text>
+                                <Text style={localStyles.inlineText}>{person.heartRate ?? "--"} BPM</Text>
                                 <Ionicons
                                     name={person.isConnected ? "bluetooth" : "alert-circle"}
                                     size={16}
@@ -108,12 +108,12 @@ export function MonitoredTab({ userId }: MonitoredTabProps) {
                                     {person.isConnected ? "Đã kết nối" : "Mất kết nối"}
                                 </Text>
                             </View>
-                            <Text style={localStyles.personLocation}>Vị trí: {person.location}</Text>
+                            <Text style={localStyles.personLocation}>Vị trí: {person.location || "Chưa có dữ liệu"}</Text>
                         </View>
                         <View style={localStyles.actionsColumn}>
                             <TouchableOpacity
                                 style={localStyles.detailButton}
-                                onPress={() => router.push(`../tabs/monitor/${person.id}`)}
+                                onPress={() => router.push(`/tabs/monitor/${person.id}`)}
                             >
                                 <Text style={localStyles.detailButtonText}>Chi tiết</Text>
                             </TouchableOpacity>

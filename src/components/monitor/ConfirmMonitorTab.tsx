@@ -32,7 +32,13 @@ export function ConfirmMonitorTab({ userId }: ConfirmMonitorTabProps) {
     const [confirmRequests, setConfirmRequests] = useState<ConfirmRequest[]>([]);
     const [watchers, setWatchers] = useState<Watcher[]>([]);
     const [loading, setLoading] = useState(false);
-    const { getConfirmRequests, getUsersMonitoringMe, approveRequest, removeMonitorFromMe } = monitorHook();
+    const {
+        getConfirmRequests,
+        getUsersMonitoringMe,
+        approveRequest,
+        rejectRequest,
+        removeMonitorFromMe,
+    } = monitorHook();
 
     const loadConfirmData = async () => {
         if (loading) return;
@@ -67,6 +73,32 @@ export function ConfirmMonitorTab({ userId }: ConfirmMonitorTabProps) {
                         } catch (error) {
                             console.log("Lỗi duyệt yêu cầu:", error);
                             Alert.alert("Lỗi", (error as Error)?.message || "Không thể duyệt yêu cầu.");
+                        } finally {
+                            setLoading(false);
+                        }
+                    },
+                },
+            ],
+        );
+    };
+
+    const handleRejectRequest = async (requestId: string) => {
+        Alert.alert(
+            "Xác nhận",
+            "Bạn có muốn hủy yêu cầu giám sát này không?",
+            [
+                { text: "Không", style: "cancel" },
+                {
+                    text: "Hủy yêu cầu",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            setLoading(true);
+                            await rejectRequest(userId, requestId);
+                            await loadConfirmData();
+                        } catch (error) {
+                            console.log("Lỗi hủy yêu cầu giám sát:", error);
+                            Alert.alert("Lỗi", (error as Error)?.message || "Không thể hủy yêu cầu giám sát.");
                         } finally {
                             setLoading(false);
                         }
@@ -122,14 +154,26 @@ export function ConfirmMonitorTab({ userId }: ConfirmMonitorTabProps) {
                         <Text style={localStyles.personName}>{request.requesterName}</Text>
                         <Text style={localStyles.personMeta}>{request.requesterPhone}</Text>
                         <View style={localStyles.requestInfoRow}>
-                            <Text style={localStyles.requestStatus}>{request.status}</Text>
-                            <View style={localStyles.actionRow}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={localStyles.requestStatus}>{request.status}</Text>
                                 <Text style={localStyles.requestDate}>{request.requestedAt}</Text>
+                            </View>
+
+                            <View style={localStyles.actionRow}>
+                                <TouchableOpacity
+                                    style={localStyles.rejectButton}
+                                    disabled={loading}
+                                    onPress={() => handleRejectRequest(request.id)}
+                                >
+                                    <Text style={localStyles.actionButtonText}>Hủy</Text>
+                                </TouchableOpacity>
+
                                 <TouchableOpacity
                                     style={localStyles.approveButton}
+                                    disabled={loading}
                                     onPress={() => handleApproveRequest(request.id)}
                                 >
-                                    <Text style={localStyles.approveButtonText}>Đồng ý</Text>
+                                    <Text style={localStyles.actionButtonText}>Đồng ý</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -158,6 +202,7 @@ export function ConfirmMonitorTab({ userId }: ConfirmMonitorTabProps) {
 
                         <TouchableOpacity
                             style={localStyles.cancelIconButton}
+                            disabled={loading}
                             onPress={() => handleRemoveMonitorFromMe(watcher.id)}
                         >
                             <Text style={localStyles.cancelIconText}>Hủy</Text>
@@ -197,6 +242,7 @@ const localStyles = StyleSheet.create({
         justifyContent: "space-between",
         alignItems: "center",
         marginTop: 10,
+        gap: 10,
     },
     requestStatus: {
         color: "#EF6C00",
@@ -205,6 +251,7 @@ const localStyles = StyleSheet.create({
     requestDate: {
         color: "#607D8B",
         fontSize: 12,
+        marginTop: 4,
     },
     actionRow: {
         flexDirection: "row",
@@ -217,7 +264,13 @@ const localStyles = StyleSheet.create({
         paddingVertical: 8,
         paddingHorizontal: 12,
     },
-    approveButtonText: {
+    rejectButton: {
+        backgroundColor: "#D32F2F",
+        borderRadius: 14,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+    },
+    actionButtonText: {
         color: "#fff",
         fontWeight: "700",
         fontSize: 12,
@@ -232,19 +285,6 @@ const localStyles = StyleSheet.create({
     emptyText: {
         color: "#795548",
         fontSize: 14,
-    },
-    cancelButton: {
-        marginTop: 12,
-        backgroundColor: "#D32F2F",
-        borderRadius: 14,
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-        alignItems: "center",
-    },
-    cancelButtonText: {
-        color: "#fff",
-        fontWeight: "700",
-        fontSize: 12,
     },
     watcherCard: {
         backgroundColor: "#fff",

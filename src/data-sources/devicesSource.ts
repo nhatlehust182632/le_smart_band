@@ -30,4 +30,33 @@ export const devicesSource = {
         return rawData;
     },
 
+
+    async saveBatteryLog(
+        userId: string,
+        userDeviceId: string,
+        batteryPercent: number,
+        isCharging: number
+    ) {
+        const rawData = await callApi("postSaveBatteryLog", {
+            body: {
+                user_id: userId,
+                user_device_id: userDeviceId,
+                battery_percent: batteryPercent,
+                is_charging: isCharging ? 1 : 0,
+            },
+        });
+
+        return rawData;
+    },
+
+    async disconnectActiveDevice(userId: string) {
+        const rawData = await callApi("postDisconnectActiveDevice", {
+            body: {
+                user_id: userId,
+            },
+        });
+
+        return rawData;
+    },
+
 };

@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../context/AuthContext";
 
 export default function RegisterScreen() {
@@ -22,10 +22,12 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState("123456");
 
   const handleRegister = async () => {
+    if (loading) return;
+
     try {
       setLoading(true);
       await register(name, phone, password);
-      router.replace("../tabs");
+      router.replace("/tabs");
     } catch (error: any) {
       Alert.alert("Đăng ký thất bại", error.message || "Có lỗi xảy ra");
     } finally {
@@ -40,6 +42,7 @@ export default function RegisterScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" />
+
       <LinearGradient colors={["#4A148C", "#6A1B9A"]} style={styles.header}>
         <Text style={styles.logo}>Tạo tài khoản</Text>
         <Text style={styles.subtitle}>

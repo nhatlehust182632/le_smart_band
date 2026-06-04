@@ -271,9 +271,8 @@ export default function LocationScreen() {
     }
   };
 
-  const handleChangeHistoryDays = async (days: HistoryFilterDays) => {
+  const handleChangeHistoryDays = (days: HistoryFilterDays) => {
     setHistoryDays(days);
-    await loadHistoryByDays(days);
   };
 
   const getLocationOnce = async () => {
@@ -340,77 +339,10 @@ export default function LocationScreen() {
   };
 
   useEffect(() => {
-    let subscription: Location.LocationSubscription | null = null;
+    if (!user?.id) return;
 
-    const initLocation = async () => {
-      await getLocationOnce();
-
-      try {
-        // subscription = await Location.watchPositionAsync(
-        //   {
-        //     accuracy: Location.Accuracy.Low,
-        //     timeInterval: 60000,
-        //     distanceInterval: 100,
-        //   },
-        //   async (newLocation) => {
-        //     const newCoords = {
-        //       latitude: newLocation.coords.latitude,
-        //       longitude: newLocation.coords.longitude,
-        //       accuracy: newLocation.coords.accuracy,
-        //     };
-
-        //     const currentKey = buildPlaceKeyFromCoords(
-        //       newCoords.latitude,
-        //       newCoords.longitude
-        //     );
-
-        //     const lastKey = lastSavedPlaceKeyRef.current;
-
-        //     setLocation(newCoords);
-        //     setUpdatedAt(formatDateTime(new Date()));
-
-        //     if (currentKey === lastKey) {
-        //       return;
-        //     }
-
-        //     mapRef.current?.animateToRegion(
-        //       {
-        //         latitude: newCoords.latitude,
-        //         longitude: newCoords.longitude,
-        //         latitudeDelta: 0.01,
-        //         longitudeDelta: 0.01,
-        //       },
-        //       10000
-        //     );
-
-        //     const fullAddress = await getAddressFromCoords(
-        //       newCoords.latitude,
-        //       newCoords.longitude
-        //     );
-
-        //     setAddress(fullAddress);
-        //     addToHistory(newCoords.latitude, newCoords.longitude, fullAddress);
-
-        //     await saveLocationIfNeeded(
-        //       newCoords.latitude,
-        //       newCoords.longitude,
-        //       fullAddress
-        //     );
-        //   }
-        // );
-      } catch (e) {
-        console.log("Watch location error:", e);
-      }
-    };
-
-    initLocation();
-
-    return () => {
-      if (subscription) {
-        // subscription.remove();
-      }
-    };
-  }, []);
+    getLocationOnce();
+  }, [user?.id]);
 
   const region = useMemo(() => {
     return {
@@ -424,12 +356,6 @@ export default function LocationScreen() {
   useEffect(() => {
     loadLocationData();
   }, [user?.id, historyDays]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-
-    loadHistoryByDays(historyDays);
-  }, [user?.id]);
 
   return (
     <SafeAreaView style={localStyles.safeGreen}>

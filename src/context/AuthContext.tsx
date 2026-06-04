@@ -22,17 +22,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
   const login = async (phone: string, password: string) => {
-    // Demo login
     if (!phone || !password) {
       throw new Error("Vui lòng nhập đầy đủ số điện thoại và mật khẩu");
     }
+
     const userLogin: UserLogin = {
       id: phone,
       password_hash: password,
       full_name: "",
     };
+
     const data = (await userService.postUserLogin(userLogin)) as any;
+
     console.log("Login User:", data);
+
     setUser({
       id: data?.id,
       full_name: data?.full_name,
@@ -43,43 +46,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = async (name: string, phone: string, password: string) => {
     const validatePhone = (phone: string) => {
-      // normalizePhone bỏ hết ký tự không phải số. VD: " 0912345678 ", "091-234-5678", "091 234 5678"
-      phone = phone.trim().replace(/[\s\-\.]/g, ""); // chỉ bỏ khoảng trắng, -, .
+      phone = phone.trim().replace(/[\s\-\.]/g, "");
+
       if (phone.startsWith("84")) {
         phone = "0" + phone.slice(2);
       }
-      // kiểm tra độ dài số điện thoại
+
       if (phone.length !== 10) return false;
-      // định dạng số điện thoại
+
       const regex = /^(0|\+84)(3|5|7|8|9)[0-9]{8}$/;
       return regex.test(phone);
     };
 
-    // const validatePassword = (password: string) => {
-    //   const regex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/;
-    //   return regex.test(password);
-    // };
     if (!name || !phone || !password) {
       throw new Error("Vui lòng nhập đầy đủ thông tin");
     }
 
-    if (validatePhone(phone)) {
-    } else {
+    if (!validatePhone(phone)) {
       throw new Error("Số điện thoại không hợp lệ");
     }
 
     const userRegister: UserRegister = {
       id: phone,
-      phone: phone,
+      phone,
       full_name: name,
       password_hash: password,
     };
-    const data = await userService.postUserRegister(userRegister);
-    // console.log("Register User:", data);
-    console.log("Đăng ký thành công:", data);
+
+    const data = (await userService.postUserRegister(userRegister)) as any;
+
+    console.log("Register User:", data);
+
     setUser({
       id: data?.id,
       full_name: data?.full_name,
+      device_id: data?.device_id,
+      device_name: data?.device_name,
     });
   };
 
@@ -102,8 +104,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
+
   if (!context) {
     throw new Error("useAuth phải được dùng bên trong AuthProvider");
   }
+
   return context;
 }

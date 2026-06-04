@@ -3,7 +3,7 @@ import * as Location from "expo-location";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CurrentLocation } from "../components/home/types";
 
-const LOCATION_UPDATE_INTERVAL = 30000;
+const LOCATION_UPDATE_INTERVAL = 120000;
 const MIN_REVERSE_GEOCODE_INTERVAL_MS = 60_000;
 const PLACE_KEY_PRECISION = 3;
 const MIN_SAVE_LOCATION_INTERVAL_MS = 10_000;
@@ -31,10 +31,21 @@ const MIN_SAVE_LOCATION_INTERVAL_MS = 10_000;
 // }
 
 export type SaveLocationData = {
-    userId: string | number;
+    id: string | number;
     latitude: number;
     longitude: number;
     place_key: string;
+    place_name: string;
+    days?: number;
+};
+
+type SavedLocation = {
+    id?: number | string;
+    latitude?: number | string;
+    longitude?: number | string;
+    place_key?: string | null;
+    place_name?: string | null;
+    recorded_at?: string;
 };
 
 // interface SavedLocation {
@@ -249,85 +260,105 @@ export function useLocationTracking(userId: string | undefined) {
     //     return [];
     // };
 
-    const updateLocationIfNeeded = async (
-        current: CurrentLocation
-    ): Promise<void> => {
-        if (!userId) return;
-
-        if (isSavingLocationRef.current) {
-            return;
+    const extractSavedLocationList = (response: unknown): SavedLocation[] => {
+        if (Array.isArray(response)) {
+            return response as SavedLocation[];
         }
 
-        const now = Date.now();
-        const isSaveTooSoon =
-            now - lastSaveLocationAttemptAtRef.current <
-            MIN_SAVE_LOCATION_INTERVAL_MS;
-
-        if (isSaveTooSoon) {
-            return;
+        if (
+            response &&
+            typeof response === "object" &&
+            "data" in response &&
+            Array.isArray((response as { data?: unknown }).data)
+        ) {
+            return (response as { data: SavedLocation[] }).data;
         }
 
-        lastSaveLocationAttemptAtRef.current = now;
-        isSavingLocationRef.current = true;
+        if (
+            response &&
+            typeof response === "object" &&
+            "historyData" in response &&
+            Array.isArray((response as { historyData?: unknown }).historyData)
+        ) {
+            return (response as { historyData: SavedLocation[] }).historyData;
+        }
 
-        try {
-            setLoading(true);
+        return [];
+    };
 
-            const currentPlaceKey = buildPlaceKey(
-                current.latitude,
-                current.longitude
-            );
+    const updateLocationIfNeeded = useCallback(
+        async (current: CurrentLocation): Promise<void> => {
+            if (!userId) return;
 
-            const savedLocationsResponse =
-                await locationService.getHistoryData(userId, 3);
-
-            const locationList = Array.isArray(savedLocationsResponse)
-                ? savedLocationsResponse
-                : Array.isArray(savedLocationsResponse?.data)
-                    ? savedLocationsResponse.data
-                    : [];
-
-            const lastSavedLocation = locationList[0];
-
-            const lastSavedPlaceKey = normalizePlaceKey(
-                lastSavedLocation?.place_key
-            );
-
-            // console.log("[LOCATION COMPARE]", {
-            //     current_place_key: currentPlaceKey,
-            //     last_saved_place_key: lastSavedPlaceKey || null,
-            //     should_save:
-            //         !lastSavedLocation || lastSavedPlaceKey !== currentPlaceKey,
-            // });
-
-            const shouldSaveLocation =
-                !lastSavedLocation || lastSavedPlaceKey !== currentPlaceKey;
-
-            if (!shouldSaveLocation) {
-                // console.log("Vị trí trùng place_key, không lưu mới", {
-                //     place_key: currentPlaceKey,
-                // });
+            if (isSavingLocationRef.current) {
                 return;
             }
 
-            // await locationService.saveLocationPlace({
-            //     latitude: current.latitude,
-            //     longitude: current.longitude,
-            //     userId,
-            //     place_key: currentPlaceKey,
-            // });
+            const now = Date.now();
+            const isSaveTooSoon =
+                now - lastSaveLocationAttemptAtRef.current <
+                MIN_SAVE_LOCATION_INTERVAL_MS;
 
-            // console.log("Đã lưu vị trí mới", {
-            //     old_place_key: lastSavedPlaceKey || null,
-            //     new_place_key: currentPlaceKey,
-            // });
-        } catch (err) {
-            console.error("Lỗi cập nhật vị trí:", err);
-        } finally {
-            isSavingLocationRef.current = false;
-            setLoading(false);
-        }
-    };
+            if (isSaveTooSoon) {
+                return;
+            }
+
+            lastSaveLocationAttemptAtRef.current = now;
+            isSavingLocationRef.current = true;
+
+            try {
+                setLoading(true);
+
+                const currentPlaceKey = buildPlaceKey(
+                    current.latitude,
+                    current.longitude
+                );
+
+                const savedLocationsResponse =
+                    await locationService.getHistoryData(String(userId), 3);
+
+                const locationList = extractSavedLocationList(savedLocationsResponse);
+                const lastSavedLocation = locationList[0];
+                const lastSavedPlaceKey = normalizePlaceKey(
+                    lastSavedLocation?.place_key
+                );
+
+                const shouldSaveLocation =
+                    !lastSavedLocation || lastSavedPlaceKey !== currentPlaceKey;
+
+                if (!shouldSaveLocation) {
+                    return;
+                }
+
+                const placeName =
+                    current.placeName ||
+                    locationAddress ||
+                    "Không xác định được tên vị trí";
+
+                await locationService.saveLocationPlace({
+                    id: userId,
+                    latitude: current.latitude,
+                    longitude: current.longitude,
+                    place_key: currentPlaceKey,
+                    place_name: placeName,
+                    days: 3,
+                });
+
+                console.log("Đã lưu vị trí mới từ Trang chủ", {
+                    user_id: userId,
+                    old_place_key: lastSavedPlaceKey || null,
+                    new_place_key: currentPlaceKey,
+                    place_name: placeName,
+                });
+            } catch (err) {
+                console.error("Lỗi cập nhật vị trí:", err);
+            } finally {
+                isSavingLocationRef.current = false;
+                setLoading(false);
+            }
+        },
+        [userId, locationAddress]
+    );
 
     const handleLocationUpdate = useCallback(async (): Promise<void> => {
         const current = await fetchCurrentLocation();

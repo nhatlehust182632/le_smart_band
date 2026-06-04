@@ -52,6 +52,17 @@ export const monitorSources = {
         return rawData;
     },
 
+    async rejectRequest(id: string, requestId: string) {
+        const rawData = await callApi("rejectRequest", {
+            body: {
+                idUser: id,
+                relationId: requestId,
+            },
+        });
+
+        return rawData;
+    },
+
     async sendFollowRequestByPhone(payload: { id: string; phone: string }) {
         const rawData = await callApi("sendFollowRequestByPhone", {
             body: {

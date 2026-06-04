@@ -24,7 +24,7 @@ export const ConnectDeviceSection = forwardRef<ConnectDeviceSectionRef>(
     const { user } = useAuth();
     const {
       scanModalVisible,
-      setScanModalVisible,
+      closeScanModal,
       devices,
       scanning,
       status,
@@ -93,19 +93,13 @@ export const ConnectDeviceSection = forwardRef<ConnectDeviceSectionRef>(
           visible={scanModalVisible}
           animationType="slide"
           transparent
-          onRequestClose={() => {
-            setScanModalVisible(false);
-          }}
+          onRequestClose={closeScanModal}
         >
           <View style={localStyles.modalOverlay}>
             <View style={localStyles.modalContent}>
               <View style={localStyles.modalHeader}>
                 <Text style={localStyles.modalTitle}>Thiết bị BLE tìm thấy</Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    setScanModalVisible(false);
-                  }}
-                >
+                <TouchableOpacity onPress={closeScanModal}>
                   <Ionicons name="close" size={24} color="#333" />
                 </TouchableOpacity>
               </View>
