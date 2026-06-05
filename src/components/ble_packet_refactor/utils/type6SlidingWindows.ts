@@ -12,15 +12,15 @@ type Type6MiniGroupSpec = {
 const TYPE_6_MINI_GROUP_SPECS: Type6MiniGroupSpec[] = [
     {
         miniGroupNo: 1,
-        expectedPacketIndexes: [1, 2, 3, 4],
+        expectedPacketIndexes: [0, 1, 2, 3],
     },
     {
         miniGroupNo: 2,
-        expectedPacketIndexes: [5, 6, 7, 8],
+        expectedPacketIndexes: [4, 5, 6, 7],
     },
     {
         miniGroupNo: 3,
-        expectedPacketIndexes: [9, 10, 11, 12],
+        expectedPacketIndexes: [8, 9, 10, 11],
     },
 ];
 

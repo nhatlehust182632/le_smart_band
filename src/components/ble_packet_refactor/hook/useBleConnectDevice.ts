@@ -203,6 +203,7 @@ export const useBleConnectDevice = (
     const type6MacAddressRef = useRef<string | null>(null);
     const latestBatteryPercentRef = useRef<number | null>(null);
     const latestIsChargingRef = useRef<number>(0);
+    const lastSubmittedHeartRateWindowKeyRef = useRef<string | null>(null);
 
     /**
      * Reset batch packet đang active.
@@ -341,22 +342,22 @@ export const useBleConnectDevice = (
                         }
                         : undefined;
 
-        console.log("[BLE TYPE SUMMARY]", {
-            type: groupedSummary.packetType,
-            mac: compactSingleOrList(groupedSummary.macList),
-            packetIds: compactSingleOrList(groupedSummary.packetIdList),
-            packetIndexes: groupedSummary.packetIndexList,
-            actualPacketCount: groupedSummary.actualPacketCount,
-            expectedPacketCount: groupedSummary.expectedPacketCount,
-            isEnoughPackets: groupedSummary.isEnoughPackets,
-            totalData,
-            systemData,
-            receiveTime: {
-                firstReceivedAt,
-                lastReceivedAt,
-                receiveDurationMs,
-            },
-        });
+        // console.log("[BLE TYPE SUMMARY]", {
+        //     type: groupedSummary.packetType,
+        //     mac: compactSingleOrList(groupedSummary.macList),
+        //     packetIds: compactSingleOrList(groupedSummary.packetIdList),
+        //     packetIndexes: groupedSummary.packetIndexList,
+        //     actualPacketCount: groupedSummary.actualPacketCount,
+        //     expectedPacketCount: groupedSummary.expectedPacketCount,
+        //     isEnoughPackets: groupedSummary.isEnoughPackets,
+        //     totalData,
+        //     systemData,
+        //     receiveTime: {
+        //         firstReceivedAt,
+        //         lastReceivedAt,
+        //         receiveDurationMs,
+        //     },
+        // });
     };
 
     /**
@@ -446,10 +447,20 @@ export const useBleConnectDevice = (
         const idUser = currentUserIdRef.current;
 
         if (!idUser) {
+            console.warn("[HEART RATE ACTIVE SKIPPED] Missing current user id", { bpm });
             return;
         }
 
         try {
+            const heartRate = Math.round(Number(bpm));
+
+            if (!Number.isFinite(heartRate) || heartRate <= 0) {
+                console.log("[HEART RATE ACTIVE SKIPPED] Invalid heart rate", {
+                    bpm,
+                    heartRate,
+                });
+                return;
+            }
             const response = await heartRateSource.saveHeartRateActive(
                 idUser,
                 bpm,
@@ -457,9 +468,61 @@ export const useBleConnectDevice = (
                 connectedUserDeviceRef.current?.user_device_id,
             );
 
-            // console.log("[HEART RATE ACTIVE SAVED]", response);
+            // console.log("[HEART RATE ACTIVE SAVED]", {
+            //     bpm,
+            //     heartRate,
+            //     response,
+            // });
         } catch (error) {
             console.warn("[HEART RATE ACTIVE SAVE FAILED]", error);
+        }
+    };
+
+    const submitHeartRateFromType6Window = async (
+        type6Values: number[],
+        context: {
+            source: string;
+            windowNo?: number;
+            packetIds?: number[];
+            miniGroupNos?: Array<1 | 2 | 3>;
+        }
+    ) => {
+        if (type6Values.length !== 1500) {
+            console.warn("[HEART RATE CALC SKIPPED] Type6 window is not exactly 1500 samples", {
+                ...context,
+                type6Length: type6Values.length,
+            });
+            return;
+        }
+
+        const windowKey = `${context.source}:${context.windowNo ?? "none"}:${context.packetIds?.join(",") ?? "none"
+            }:${context.miniGroupNos?.join(",") ?? "none"}`;
+
+        if (lastSubmittedHeartRateWindowKeyRef.current === windowKey) {
+            return;
+        }
+
+        try {
+            const bpm = calculateHeartRateFromType6(type6Values);
+
+            // console.log("[HEART RATE CALC RESULT]", {
+            //     ...context,
+            //     type6Length: type6Values.length,
+            //     bpm,
+            // });
+
+            if (bpm === null) {
+                return;
+            }
+
+            lastSubmittedHeartRateWindowKeyRef.current = windowKey;
+            await submitHeartRateActive(bpm);
+        } catch (error) {
+            console.warn("[HEART RATE CALC FAILED]", {
+                ...context,
+                type6Length: type6Values.length,
+                error,
+            });
         }
     };
 
@@ -521,20 +584,54 @@ export const useBleConnectDevice = (
     const submitAtrialAlertIfNeeded = async (modelProbability: number) => {
         const userId = currentUserIdRef.current;
 
+        const alertPayload = {
+            userId,
+            thresholdValue: modelProbability,
+            message: `Phát hiện nguy cơ rung nhĩ. Xác suất AI: ${modelProbability}`,
+            createdAtClient: new Date().toISOString(),
+        };
+
+        // console.log("[ATRIAL ALERT CHECK AFTER AI]", alertPayload);
+
         if (!userId) {
+            console.log("[ATRIAL ALERT SKIPPED] Missing userId", alertPayload);
+            return;
+        }
+
+        if (!Number.isFinite(modelProbability)) {
+            console.log("[ATRIAL ALERT SKIPPED] Invalid modelProbability", alertPayload);
             return;
         }
 
         if (modelProbability <= 0.05) {
+            console.log("[ATRIAL ALERT SKIPPED] Probability <= threshold", {
+                ...alertPayload,
+                threshold: 0.05,
+            });
             return;
         }
 
         try {
-            await alertService.saveAtrialAlert(userId, modelProbability);
-            console.log("[ATRIAL ALERT SAVED]", modelProbability);
+            // console.log("[ATRIAL ALERT SAVE REQUEST]", alertPayload);
+
+            const response = await alertService.saveAtrialAlert(
+                userId,
+                modelProbability,
+                alertPayload.message,
+            );
+
+            // console.log("[ATRIAL ALERT SAVE RESPONSE]", {
+            //     request: alertPayload,
+            //     response,
+            // });
+
             await notifyAtrialAlertInBackground(modelProbability);
         } catch (error) {
-            console.warn("[ATRIAL ALERT SAVE FAILED]", error);
+            console.warn("[ATRIAL ALERT SAVE FAILED]", {
+                request: alertPayload,
+                error,
+                errorMessage: error instanceof Error ? error.message : String(error),
+            });
         }
     };
 
@@ -561,15 +658,15 @@ export const useBleConnectDevice = (
                 if (!modelInput) {
                     continue;
                 }
-                console.log("[MODEL INPUT SENT]", {
-                    modelCallCount: modelInput.modelInputNo,
-                    arrayLengths: {
-                        type6: modelInput.type6Values.length,
-                        type5x: modelInput.xValues.length,
-                        type5y: modelInput.yValues.length,
-                        type5z: modelInput.zValues.length,
-                    },
-                });
+                // console.log("[MODEL INPUT SENT]", {
+                //     modelCallCount: modelInput.modelInputNo,
+                //     arrayLengths: {
+                //         type6: modelInput.type6Values.length,
+                //         type5x: modelInput.xValues.length,
+                //         type5y: modelInput.yValues.length,
+                //         type5z: modelInput.zValues.length,
+                //     },
+                // });
 
                 /**
                  * Đây là vị trí duy nhất đưa 4 mảng vào hàm demo/model.
@@ -581,30 +678,31 @@ export const useBleConnectDevice = (
                 const modelProbability =
                     await processSensorFusionModelDemo(modelInput);
 
-                console.log("[AI MODULE RESULT]", {
-                    modelInputNo: modelInput.modelInputNo,
-                    type5WindowNo: modelInput.type5WindowNo,
-                    type6WindowNo: modelInput.type6WindowNo,
-                    probability: modelProbability,
-                    arrayLengths: {
-                        type6: modelInput.type6Values.length,
-                        type5x: modelInput.xValues.length,
-                        type5y: modelInput.yValues.length,
-                        type5z: modelInput.zValues.length,
-                    },
-                });
+                // console.log("[AI MODULE RESULT]", {
+                //     modelInputNo: modelInput.modelInputNo,
+                //     type5WindowNo: modelInput.type5WindowNo,
+                //     type6WindowNo: modelInput.type6WindowNo,
+                //     probability: modelProbability,
+                //     probabilityType: typeof modelProbability,
+                //     willSaveAtrialAlert: Number.isFinite(modelProbability) && modelProbability > 0.05,
+                //     currentUserId: currentUserIdRef.current,
+                //     arrayLengths: {
+                //         type6: modelInput.type6Values.length,
+                //         type5x: modelInput.xValues.length,
+                //         type5y: modelInput.yValues.length,
+                //         type5z: modelInput.zValues.length,
+                //     },
+                // });
 
                 await submitAtrialAlertIfNeeded(modelProbability);
 
-                if (modelInput.type6Values.length >= 1500) {
-                    const bpm = calculateHeartRateFromType6(
-                        modelInput.type6Values,
-                    );
-
-                    if (bpm !== null) {
-                        await submitHeartRateActive(bpm);
+                await submitHeartRateFromType6Window(
+                    modelInput.type6Values,
+                    {
+                        source: "MODEL_INPUT",
+                        windowNo: modelInput.type6WindowNo,
                     }
-                }
+                );
 
 
 
@@ -615,7 +713,11 @@ export const useBleConnectDevice = (
                  * => dữ liệu cũ không còn giữ trong queue xử lý nữa.
                  */
             }
-        } catch {
+        } catch (error) {
+            console.warn("[SENSOR FUSION QUEUE PROCESS FAILED]", {
+                error,
+                errorMessage: error instanceof Error ? error.message : String(error),
+            });
         } finally {
             isProcessingSensorFusionQueueRef.current = false;
         }
@@ -625,24 +727,92 @@ export const useBleConnectDevice = (
      * Khi đã có sliding window type 5 và type 6,
      * ghép chúng theo thứ tự tạo ra để thành đầu vào model.
      */
+    // const pairType5AndType6WindowsForModel = () => {
+    //     console.log("[WINDOW QUEUE BEFORE PAIR]", {
+    //         type5WindowQueueLength: type5SlidingWindowQueueRef.current.length,
+    //         type6WindowQueueLength: type6SlidingWindowQueueRef.current.length,
+    //         type5MiniGroupQueueLength: type5MiniGroupQueueRef.current.length,
+    //         type6MiniGroupQueueLength: type6MiniGroupQueueRef.current.length,
+    //     });
+    //     while (
+    //         type5SlidingWindowQueueRef.current.length > 0 &&
+    //         type6SlidingWindowQueueRef.current.length > 0
+    //     ) {
+    //         const type5Window =
+    //             type5SlidingWindowQueueRef.current.shift();
+
+    //         const type6Window =
+    //             type6SlidingWindowQueueRef.current.shift();
+    //         // console.log("[WINDOWS PAIRED]", { type5Window, type6Window });
+    //         if (!type5Window || !type6Window) {
+    //             continue;
+    //         }
+
+    //         sensorFusionModelInputCounterRef.current += 1;
+
+    //         const modelInput = createSensorFusionModelInput(
+    //             sensorFusionModelInputCounterRef.current,
+    //             type5Window,
+    //             type6Window
+    //         );
+
+    //         sensorFusionProcessingQueueRef.current.push(modelInput);
+    //     }
+
+    //     void processSensorFusionQueueSequentially();
+    // };
     const pairType5AndType6WindowsForModel = () => {
-        console.log("[WINDOW QUEUE BEFORE PAIR]", {
-            type5WindowQueueLength: type5SlidingWindowQueueRef.current.length,
-            type6WindowQueueLength: type6SlidingWindowQueueRef.current.length,
+        const inputStatus = {
             type5MiniGroupQueueLength: type5MiniGroupQueueRef.current.length,
             type6MiniGroupQueueLength: type6MiniGroupQueueRef.current.length,
-        });
+            type5WindowQueueLength: type5SlidingWindowQueueRef.current.length,
+            type6WindowQueueLength: type6SlidingWindowQueueRef.current.length,
+            sensorFusionQueueLength: sensorFusionProcessingQueueRef.current.length,
+            canPairForAi:
+                type5SlidingWindowQueueRef.current.length > 0 &&
+                type6SlidingWindowQueueRef.current.length > 0,
+        };
+
+        // console.log("[AI INPUT CONDITION BEFORE PAIR]", inputStatus);
+
+        // if (!inputStatus.canPairForAi) {
+        //     console.log("[AI MODULE SKIPPED BEFORE PAIR]", {
+        //         reason:
+        //             type5SlidingWindowQueueRef.current.length <= 0
+        //                 ? "Missing type5 sliding window"
+        //                 : "Missing type6 sliding window",
+        //         ...inputStatus,
+        //     });
+        // }
+
         while (
             type5SlidingWindowQueueRef.current.length > 0 &&
             type6SlidingWindowQueueRef.current.length > 0
         ) {
-            const type5Window =
-                type5SlidingWindowQueueRef.current.shift();
+            const type5Window = type5SlidingWindowQueueRef.current.shift();
+            const type6Window = type6SlidingWindowQueueRef.current.shift();
 
-            const type6Window =
-                type6SlidingWindowQueueRef.current.shift();
-            // console.log("[WINDOWS PAIRED]", { type5Window, type6Window });
+            // console.log("[AI WINDOWS PAIRING]", {
+            //     hasType5Window: !!type5Window,
+            //     hasType6Window: !!type6Window,
+            //     type5WindowNo: type5Window?.windowNo,
+            //     type6WindowNo: type6Window?.windowNo,
+            //     type5Length: type5Window
+            //         ? {
+            //             x: type5Window.xValues.length,
+            //             y: type5Window.yValues.length,
+            //             z: type5Window.zValues.length,
+            //         }
+            //         : null,
+            //     type6Length: type6Window?.values.length,
+            // });
+
             if (!type5Window || !type6Window) {
+                console.log("[AI WINDOWS PAIR SKIPPED]", {
+                    reason: "Missing type5Window or type6Window after shift",
+                    hasType5Window: !!type5Window,
+                    hasType6Window: !!type6Window,
+                });
                 continue;
             }
 
@@ -651,10 +821,26 @@ export const useBleConnectDevice = (
             const modelInput = createSensorFusionModelInput(
                 sensorFusionModelInputCounterRef.current,
                 type5Window,
-                type6Window
+                type6Window,
             );
 
+            // console.log("[AI MODEL INPUT CREATED]", {
+            //     modelInputNo: modelInput.modelInputNo,
+            //     type5WindowNo: modelInput.type5WindowNo,
+            //     type6WindowNo: modelInput.type6WindowNo,
+            //     lengths: {
+            //         type6: modelInput.type6Values.length,
+            //         type5x: modelInput.xValues.length,
+            //         type5y: modelInput.yValues.length,
+            //         type5z: modelInput.zValues.length,
+            //     },
+            // });
+
             sensorFusionProcessingQueueRef.current.push(modelInput);
+
+            // console.log("[AI MODEL QUEUE PUSHED]", {
+            //     sensorFusionQueueLength: sensorFusionProcessingQueueRef.current.length,
+            // });
         }
 
         void processSensorFusionQueueSequentially();
@@ -670,6 +856,20 @@ export const useBleConnectDevice = (
         const completeMiniGroups = miniGroups.filter((miniGroup) => {
             return miniGroup.isComplete;
         });
+
+        // console.log("[TYPE5 WINDOW INPUT]", {
+        //     receivedMiniGroupCount: miniGroups.length,
+        //     completeMiniGroupCount: completeMiniGroups.length,
+        //     queueLengthBeforeAppend: type5MiniGroupQueueRef.current.length,
+        //     groups: miniGroups.map((group) => ({
+        //         miniGroupNo: group.miniGroupNo,
+        //         isComplete: group.isComplete,
+        //         packetCount: group.packetId,
+        //         xLength: group.xValues.length,
+        //         yLength: group.yValues.length,
+        //         zLength: group.zValues.length,
+        //     })),
+        // });
 
         completeMiniGroups.forEach((miniGroup) => {
             type5MiniGroupQueueRef.current.push(miniGroup);
@@ -690,7 +890,13 @@ export const useBleConnectDevice = (
                 );
 
                 type5SlidingWindowQueueRef.current.push(slidingWindow);
-
+                // console.log("[TYPE5 WINDOW CREATED]", {
+                //     windowNo: slidingWindow.windowNo,
+                //     xLength: slidingWindow.xValues.length,
+                //     yLength: slidingWindow.yValues.length,
+                //     zLength: slidingWindow.zValues.length,
+                //     type5WindowQueueLength: type5SlidingWindowQueueRef.current.length,
+                // });
                 /**
                  * Chỉ giữ lại 2 mini group gần nhất để tạo cửa sổ trượt tiếp theo.
                  */
@@ -710,7 +916,17 @@ export const useBleConnectDevice = (
         const completeMiniGroups = miniGroups.filter((miniGroup) => {
             return miniGroup.isComplete;
         });
-
+        // console.log("[TYPE6 WINDOW INPUT]", {
+        //     receivedMiniGroupCount: miniGroups.length,
+        //     completeMiniGroupCount: completeMiniGroups.length,
+        //     queueLengthBeforeAppend: type6MiniGroupQueueRef.current.length,
+        //     groups: miniGroups.map((group) => ({
+        //         miniGroupNo: group.miniGroupNo,
+        //         isComplete: group.isComplete,
+        //         packetCount: group.packetId,
+        //         valuesLength: group.values.length,
+        //     })),
+        // });
         completeMiniGroups.forEach((miniGroup) => {
             type6MiniGroupQueueRef.current.push(miniGroup);
 
@@ -730,6 +946,20 @@ export const useBleConnectDevice = (
                 );
 
                 type6SlidingWindowQueueRef.current.push(slidingWindow);
+                // console.log("[TYPE6 WINDOW CREATED]", {
+                //     windowNo: slidingWindow.windowNo,
+                //     valuesLength: slidingWindow.values.length,
+                //     type6WindowQueueLength: type6SlidingWindowQueueRef.current.length,
+                // });
+                void submitHeartRateFromType6Window(
+                    slidingWindow.values,
+                    {
+                        source: "TYPE6_WINDOW",
+                        windowNo: slidingWindow.windowNo,
+                        packetIds: slidingWindow.packetIds,
+                        miniGroupNos: slidingWindow.miniGroupNos,
+                    }
+                );
 
                 /**
                  * Chỉ giữ lại 2 mini group gần nhất để tạo cửa sổ trượt tiếp theo.
@@ -793,19 +1023,19 @@ export const useBleConnectDevice = (
             finalizedAtMs: Date.now(),
         };
 
-        console.log("[BLE BATCH STATUS]", {
-            packetId: activeBatch.packetId,
-            status: completeness.isComplete ? "COMPLETE" : "INCOMPLETE",
-            finalizeReason: reason,
-            totalPackets: activeBatch.packets.length,
-            type5MissingIndexes: completeness.type5.missingIndexes,
-            type6MissingIndexes: completeness.type6.missingIndexes,
-            firstReceivedAt: activeBatch.firstReceivedAt,
-            lastReceivedAt: activeBatch.lastReceivedAt,
-            durationMs:
-                new Date(activeBatch.lastReceivedAt).getTime() -
-                new Date(activeBatch.firstReceivedAt).getTime(),
-        });
+        // console.log("[BLE BATCH STATUS]", {
+        //     packetId: activeBatch.packetId,
+        //     status: completeness.isComplete ? "COMPLETE" : "INCOMPLETE",
+        //     finalizeReason: reason,
+        //     totalPackets: activeBatch.packets.length,
+        //     type5MissingIndexes: completeness.type5.missingIndexes,
+        //     type6MissingIndexes: completeness.type6.missingIndexes,
+        //     firstReceivedAt: activeBatch.firstReceivedAt,
+        //     lastReceivedAt: activeBatch.lastReceivedAt,
+        //     durationMs:
+        //         new Date(activeBatch.lastReceivedAt).getTime() -
+        //         new Date(activeBatch.firstReceivedAt).getTime(),
+        // });
 
         const packetsOfFinishedBatch = [...activeBatch.packets];
 
@@ -843,13 +1073,87 @@ export const useBleConnectDevice = (
         }
 
         void submitBatteryLogIfNeeded();
+        // console.log("[RAW PACKETS BEFORE MINI GROUP]", {
+        //     packetCount: packetsOfFinishedBatch.length,
+        //     packets: packetsOfFinishedBatch.map((packet: any, index: number) => ({
+        //         index,
+        //         type: packet.data?.header?.packetType?.dec,
+        //         packetId: packet.data?.header?.packetId?.dec,
+        //         packetIndex: packet.data?.header?.packetIndex?.dec,
+        //         isValid: packet.data?.isValid,
+        //         payloadName: packet.data?.payload?.packetName,
+        //         dataLength:
+        //             packet.data?.payload?.values?.length ??
+        //             packet.data?.payload?.xValues?.length ??
+        //             null,
+        //         xLength: packet.data?.payload?.xValues?.length,
+        //         yLength: packet.data?.payload?.yValues?.length,
+        //         zLength: packet.data?.payload?.zValues?.length,
+        //         valuesLength: packet.data?.payload?.values?.length,
+        //     })),
+        // });
+
+        const packetTypeCounter = packetsOfFinishedBatch.reduce(
+            (acc: Record<string, number>, packet: any) => {
+                const key = String(packet.data?.header?.packetType?.dec ?? "UNKNOWN");
+                acc[key] = (acc[key] || 0) + 1;
+                return acc;
+            },
+            {},
+        );
+
+        // console.log("[PACKET TYPE COUNTER BEFORE AI]", packetTypeCounter);
 
         const type5MiniGroups =
             buildType5MiniGroupsFromPackets(packetsOfFinishedBatch);
 
+        // console.log("[TYPE5 MINI GROUP RESULT]", {
+        //     inputPacketCount: packetsOfFinishedBatch.length,
+        //     type5PacketCount: packetsOfFinishedBatch.filter(
+        //         (packet: any) => packet.data?.header?.packetType?.dec === 5,
+        //     ).length,
+        //     type5MiniGroupCount: type5MiniGroups.length,
+        //     type5MiniGroups: type5MiniGroups.map((group: any) => ({
+        //         packetId: group.packetId,
+        //         miniGroupNo: group.miniGroupNo,
+        //         isComplete: group.isComplete,
+        //         sourcePacketIndexes: group.sourcePacketIndexes,
+        //         xLength: group.xValues?.length,
+        //         yLength: group.yValues?.length,
+        //         zLength: group.zValues?.length,
+        //     })),
+        // });
+
         const type6MiniGroups =
             buildType6MiniGroupsFromPackets(packetsOfFinishedBatch);
 
+        console.log("[AI MINI GROUP INPUT]", {
+            packetCount: packetsOfFinishedBatch.length,
+
+            type5MiniGroups: type5MiniGroups.map((group) => ({
+                miniGroupNo: group.miniGroupNo,
+                isComplete: group.isComplete,
+                packetCount: group.packetId,
+                xLength: group.xValues.length,
+                yLength: group.yValues.length,
+                zLength: group.zValues.length,
+            })),
+
+            type6MiniGroups: type6MiniGroups.map((group) => ({
+                miniGroupNo: group.miniGroupNo,
+                isComplete: group.isComplete,
+                packetCount: group.packetId,
+                valuesLength: group.values.length,
+            })),
+
+            completeType5MiniGroupCount: type5MiniGroups.filter(
+                (group) => group.isComplete,
+            ).length,
+
+            completeType6MiniGroupCount: type6MiniGroups.filter(
+                (group) => group.isComplete,
+            ).length,
+        });
         // logBleTypeCollectionSummary(
         //     packetsOfFinishedBatch,
         //     groupedType5
@@ -1138,53 +1442,122 @@ export const useBleConnectDevice = (
     const startReceivingRealBleData = async (connected: Device) => {
         const services = await connected.services();
         const readableTargets: ReadTarget[] = [];
-        console.log("[BLE REAL SERVICES]", services.map((service) => service.uuid));
+        // console.log("[BLE REAL SERVICES]", services.map((service) => service.uuid));
         for (const service of services) {
             const characteristics = await service.characteristics();
-            console.log("[BLE REAL CHARACTERISTICS]", {
-                serviceUUID: service.uuid,
-                characteristics: characteristics.map((item) => ({
-                    uuid: item.uuid,
-                    isReadable: item.isReadable,
-                    isWritableWithResponse: item.isWritableWithResponse,
-                    isWritableWithoutResponse: item.isWritableWithoutResponse,
-                    isNotifiable: item.isNotifiable,
-                    isIndicatable: item.isIndicatable,
-                })),
-            });
+            // console.log("[BLE REAL CHARACTERISTICS]", {
+            //     serviceUUID: service.uuid,
+            //     characteristics: characteristics.map((item) => ({
+            //         uuid: item.uuid,
+            //         isReadable: item.isReadable,
+            //         isWritableWithResponse: item.isWritableWithResponse,
+            //         isWritableWithoutResponse: item.isWritableWithoutResponse,
+            //         isNotifiable: item.isNotifiable,
+            //         isIndicatable: item.isIndicatable,
+            //     })),
+            // });
             for (const characteristic of characteristics) {
+                //LeNTN12
+                // if (
+                //     characteristic.isNotifiable ||
+                //     characteristic.isIndicatable
+                // ) {
+                //     try {
+                //         const subscription = characteristic.monitor(
+                //             (error, monitoredCharacteristic) => {
+                //                 if (error) {
+                //                     return;
+                //                 }
+
+                //                 if (monitoredCharacteristic?.value) {
+                //                     console.log("[BLE RECEIVE]", {
+                //                         source: "NOTIFY",
+                //                         serviceUUID: service.uuid,
+                //                         charUUID: characteristic.uuid,
+                //                         value: monitoredCharacteristic.value,
+                //                     });
+                //                     void printData(
+                //                         "NOTIFY",
+                //                         service.uuid,
+                //                         characteristic.uuid,
+                //                         monitoredCharacteristic.value
+                //                     );
+                //                 }
+                //             }
+                //         );
+
+                //         notifySubscriptionsRef.current.push(subscription);
+                //     } catch {
+                //     }
+                // }
                 if (
                     characteristic.isNotifiable ||
                     characteristic.isIndicatable
                 ) {
                     try {
+                        // console.log("[BLE TRY MONITOR]", {
+                        //     serviceUUID: service.uuid,
+                        //     charUUID: characteristic.uuid,
+                        //     isNotifiable: characteristic.isNotifiable,
+                        //     isIndicatable: characteristic.isIndicatable,
+                        // });
+
                         const subscription = characteristic.monitor(
                             (error, monitoredCharacteristic) => {
                                 if (error) {
+                                    // console.warn("[BLE MONITOR ERROR]", {
+                                    //     serviceUUID: service.uuid,
+                                    //     charUUID: characteristic.uuid,
+                                    //     message: error.message,
+                                    //     reason: error.reason,
+                                    //     errorCode: error.errorCode,
+                                    //     attErrorCode: error.attErrorCode,
+                                    // });
                                     return;
                                 }
 
-                                if (monitoredCharacteristic?.value) {
-                                    console.log("[BLE RECEIVE]", {
-                                        source: "NOTIFY",
-                                        serviceUUID: service.uuid,
-                                        charUUID: characteristic.uuid,
-                                        value: monitoredCharacteristic.value,
-                                    });
-                                    void printData(
-                                        "NOTIFY",
-                                        service.uuid,
-                                        characteristic.uuid,
-                                        monitoredCharacteristic.value
-                                    );
+                                // console.log("[BLE MONITOR CALLBACK]", {
+                                //     serviceUUID: service.uuid,
+                                //     charUUID: characteristic.uuid,
+                                //     hasValue: !!monitoredCharacteristic?.value,
+                                //     value: monitoredCharacteristic?.value ?? null,
+                                // });
+
+                                if (!monitoredCharacteristic?.value) {
+                                    return;
                                 }
+
+                                // console.log("[BLE RECEIVE]", {
+                                //     source: "NOTIFY",
+                                //     serviceUUID: service.uuid,
+                                //     charUUID: characteristic.uuid,
+                                //     value: monitoredCharacteristic.value,
+                                // });
+
+                                void printData(
+                                    "NOTIFY",
+                                    service.uuid,
+                                    characteristic.uuid,
+                                    monitoredCharacteristic.value
+                                );
                             }
                         );
 
                         notifySubscriptionsRef.current.push(subscription);
-                    } catch {
+
+                        // console.log("[BLE MONITOR STARTED]", {
+                        //     serviceUUID: service.uuid,
+                        //     charUUID: characteristic.uuid,
+                        // });
+                    } catch (error) {
+                        console.warn("[BLE MONITOR START FAILED]", {
+                            serviceUUID: service.uuid,
+                            charUUID: characteristic.uuid,
+                            error,
+                        });
                     }
                 }
+                //end of LeNTN12
 
                 if (characteristic.isReadable) {
                     readableTargets.push({
@@ -1200,12 +1573,12 @@ export const useBleConnectDevice = (
                             );
 
                         if (readNow?.value) {
-                            console.log("[BLE RECEIVE]", {
-                                source: "READ_NOW",
-                                serviceUUID: service.uuid,
-                                charUUID: characteristic.uuid,
-                                value: readNow.value,
-                            });
+                            // console.log("[BLE RECEIVE]", {
+                            //     source: "READ_NOW",
+                            //     serviceUUID: service.uuid,
+                            //     charUUID: characteristic.uuid,
+                            //     value: readNow.value,
+                            // });
 
                             void printData(
                                 "READ_NOW",
@@ -1220,43 +1593,44 @@ export const useBleConnectDevice = (
             }
         }
 
-        if (readableTargets.length > 0) {
-            pollTimerRef.current = setInterval(async () => {
-                const currentDevice = deviceRef.current;
+        //LeNTN12 - Tạm thời chưa dùng poll vì thấy notify đã ổn định, nếu sau này cần có thể mở lại
+        // if (readableTargets.length > 0) {
+        //     pollTimerRef.current = setInterval(async () => {
+        //         const currentDevice = deviceRef.current;
 
-                if (!currentDevice) {
-                    return;
-                }
+        //         if (!currentDevice) {
+        //             return;
+        //         }
 
-                for (const target of readableTargets) {
-                    try {
-                        const characteristic =
-                            await currentDevice.readCharacteristicForService(
-                                target.serviceUUID,
-                                target.charUUID
-                            );
+        //         for (const target of readableTargets) {
+        //             try {
+        //                 const characteristic =
+        //                     await currentDevice.readCharacteristicForService(
+        //                         target.serviceUUID,
+        //                         target.charUUID
+        //                     );
 
-                        if (characteristic?.value) {
-                            console.log("[BLE RECEIVE]", {
-                                source: "POLL",
-                                serviceUUID: target.serviceUUID,
-                                charUUID: target.charUUID,
-                                value: characteristic.value,
-                            });
+        //                 if (characteristic?.value) {
+        //                     console.log("[BLE RECEIVE]", {
+        //                         source: "POLL",
+        //                         serviceUUID: target.serviceUUID,
+        //                         charUUID: target.charUUID,
+        //                         value: characteristic.value,
+        //                     });
 
-                            void printData(
-                                "POLL",
-                                target.serviceUUID,
-                                target.charUUID,
-                                characteristic.value
-                            );
-                        }
-                    } catch {
-                        // Không spam log khi poll thất bại
-                    }
-                }
-            }, 1000);
-        }
+        //                     void printData(
+        //                         "POLL",
+        //                         target.serviceUUID,
+        //                         target.charUUID,
+        //                         characteristic.value
+        //                     );
+        //                 }
+        //             } catch {
+        //                 // Không spam log khi poll thất bại
+        //             }
+        //         }
+        //     }, 1000);
+        // }
     };
 
     /**
@@ -1304,7 +1678,7 @@ export const useBleConnectDevice = (
             runSelectedDemoBlePacketSession();
             return;
         }
-        console.log("[BLE MODE] REAL DEVICE DATA ENABLED");
+        // console.log("[BLE MODE] REAL DEVICE DATA ENABLED");
 
         await startReceivingRealBleData(connected);
     };

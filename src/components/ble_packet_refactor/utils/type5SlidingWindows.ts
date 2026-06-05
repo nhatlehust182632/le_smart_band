@@ -166,7 +166,6 @@ export const buildType5MiniGroupsFromPackets = (
                 xValues.length === TYPE_5_MINI_GROUP_SAMPLE_COUNT_PER_AXIS &&
                 yValues.length === TYPE_5_MINI_GROUP_SAMPLE_COUNT_PER_AXIS &&
                 zValues.length === TYPE_5_MINI_GROUP_SAMPLE_COUNT_PER_AXIS;
-
             miniGroups.push({
                 packetId,
                 miniGroupNo: (miniGroupIndex + 1) as 1 | 2 | 3,
@@ -186,11 +185,7 @@ export const buildType5MiniGroupsFromPackets = (
 
                 expectedDataCountPerAxis: 500,
 
-                isComplete:
-                    hasExactly19Packets &&
-                    hasFullExpectedIndexes &&
-                    hasExactly1500Samples &&
-                    hasEnough500Samples,
+                isComplete: hasEnough500Samples,
             });
         }
     });
