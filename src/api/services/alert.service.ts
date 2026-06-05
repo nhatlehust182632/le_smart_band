@@ -40,4 +40,13 @@ export const alertService = {
             },
         });
     },
+
+    getAtrialAlertsToday(id: string, date?: string) {
+        return callApi("getAtrialAlertsToday", {
+            query: {
+                idUser: id,
+                date,
+            },
+        });
+    },
 };

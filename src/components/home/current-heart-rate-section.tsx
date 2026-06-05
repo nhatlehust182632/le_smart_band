@@ -45,9 +45,20 @@ export function CurrentHeartRateSection({
       }
 
       const countResp = await alertService.getAtrialAlertCount(userId);
+
+      // console.log("[ATRIAL ALERT COUNT RESPONSE]", countResp);
+
+      const countSource = Array.isArray(countResp) ? countResp[0] : countResp;
+
       const count = Number(
-        countResp?.count ?? countResp?.total ?? countResp?.warning_count ?? countResp ?? 0
+        countSource?.total_alerts_today ??
+        countSource?.count ??
+        countSource?.total ??
+        countSource?.warning_count ??
+        countSource ??
+        0
       );
+
       setAtrialAlertCount(Number.isFinite(count) ? count : 0);
     } catch (error) {
       console.log("Lỗi lấy nhịp tim:", error);

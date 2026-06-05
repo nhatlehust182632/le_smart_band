@@ -83,13 +83,12 @@ export const decodeBlePacket = (value: string): ParsedBlePacket => {
              * Payload byte đầu tiên = % pin.
              * Ví dụ: 85 => 85%
              */
-            const rawBatteryPercent = payloadDec[0] ?? 0;
+            const rawBatteryPercent = payloadDec[1] ?? 0;
 
             const batteryPercent = Math.max(
                 0,
                 Math.min(100, rawBatteryPercent)
             );
-
             parsedPayload = {
                 packetName: "TYPE_0",
                 status: "BATTERY_LEVEL",

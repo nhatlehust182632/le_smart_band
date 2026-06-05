@@ -1,3 +1,4 @@
+import { alertService } from "@/api/services/alert.service";
 import { useAuth } from "@/context/AuthContext";
 import { heartRateHook } from "@/hooks/heartRate";
 import { FontAwesome5, Ionicons } from "@expo/vector-icons";
@@ -32,28 +33,7 @@ type AtrialFibrillationAlert = {
   message: string;
 };
 
-const atrialFibrillationAlerts: AtrialFibrillationAlert[] = [
-  {
-    date: "2026-05-30",
-    time: "16:44:00",
-    message: "Cảnh báo bất thường",
-  },
-  {
-    date: "2026-05-30",
-    time: "16:44:30",
-    message: "Cảnh báo bất thường",
-  },
-  {
-    date: "2026-05-30",
-    time: "16:44:30",
-    message: "Cảnh báo bất thường",
-  },
-  {
-    date: "2026-05-30",
-    time: "16:44:30",
-    message: "Cảnh báo bất thường",
-  },
-];
+
 
 export default function HeartRateScreen() {
   const [loading, setLoading] = useState(false);
@@ -62,6 +42,7 @@ export default function HeartRateScreen() {
     [],
   );
   const [heartRateHistory, setHeartRateHistory] = useState<HeartRateTimes>([]);
+  const [atrialFibrillationAlerts, setAtrialFibrillationAlerts] = useState<AtrialFibrillationAlert[]>([]);
   const [timeRange, setTimeRange] = useState<"1H" | "6H" | "24H">("1H");
   const {
     getInfoHeartRateByUser,
@@ -104,6 +85,30 @@ export default function HeartRateScreen() {
       setHeartRateHistory(data || []);
     } catch (error) {
       console.log("Lỗi lấy nhịp tim:", error);
+    }
+  };
+
+  // lấy danh sách cảnh báo rung nhĩ trong ngày hiện tại
+  const handleGetAtrialFibrillationAlertsToday = async () => {
+    if (!user?.id) {
+      setAtrialFibrillationAlerts([]);
+      return;
+    }
+
+    try {
+      const data = await alertService.getAtrialAlertsToday(String(user.id));
+      const list = Array.isArray(data) ? data : [];
+
+      setAtrialFibrillationAlerts(
+        list.map((item: any) => ({
+          date: String(item?.date || "--/--/----"),
+          time: String(item?.time || "--:--:--"),
+          message: "Cảnh báo bất thường",
+        })),
+      );
+    } catch (error) {
+      console.log("Lỗi lấy danh sách cảnh báo rung nhĩ:", error);
+      setAtrialFibrillationAlerts([]);
     }
   };
 
@@ -151,6 +156,18 @@ export default function HeartRateScreen() {
   useEffect(() => {
     handleGetHeartRateHistory();
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    handleGetAtrialFibrillationAlertsToday();
+
+    const interval = setInterval(() => {
+      handleGetAtrialFibrillationAlertsToday();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [user?.id]);
 
   // dựng biểu đồ
   const chartWidth = 400;
@@ -508,6 +525,14 @@ export default function HeartRateScreen() {
               <Ionicons name="warning-outline" size={22} color="#D32F2F" />
               <Text style={styles.cardTitle}>Danh sách cảnh báo rung nhĩ</Text>
             </View>
+
+            {/* {atrialFibrillationAlerts.length > 0 && (
+              <View style={localStyles.alertHeaderRow}>
+                <Text style={localStyles.alertHeaderDate}>Ngày</Text>
+                <Text style={localStyles.alertHeaderTime}>Giờ</Text>
+                <Text style={localStyles.alertHeaderMessage}>Cảnh báo</Text>
+              </View>
+            )} */}
 
             {atrialFibrillationAlerts.length > 0 ? (
               atrialFibrillationAlerts.map((item, index) => (
