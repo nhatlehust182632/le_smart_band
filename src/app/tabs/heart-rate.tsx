@@ -526,14 +526,6 @@ export default function HeartRateScreen() {
               <Text style={styles.cardTitle}>Danh sách cảnh báo rung nhĩ</Text>
             </View>
 
-            {/* {atrialFibrillationAlerts.length > 0 && (
-              <View style={localStyles.alertHeaderRow}>
-                <Text style={localStyles.alertHeaderDate}>Ngày</Text>
-                <Text style={localStyles.alertHeaderTime}>Giờ</Text>
-                <Text style={localStyles.alertHeaderMessage}>Cảnh báo</Text>
-              </View>
-            )} */}
-
             {atrialFibrillationAlerts.length > 0 ? (
               atrialFibrillationAlerts.map((item, index) => (
                 <View

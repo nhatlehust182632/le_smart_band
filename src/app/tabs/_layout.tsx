@@ -1,13 +1,17 @@
+import { requestNotificationPermission } from "@/services/notification.service";
 import {
   FontAwesome5,
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import { Redirect, Tabs } from "expo-router";
-import React from "react";
+import React, { useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
 
 export default function TabsLayout() {
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
   const { user } = useAuth();
 
   if (!user) {

@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
-    AppState,
     PermissionsAndroid,
-    Platform,
+    Platform
 } from "react-native";
 import {
     BleManager,
@@ -59,6 +58,7 @@ import {
     stopDemoBlePacketTimers,
 } from "../demo/runDemoBlePackets";
 
+import { showAtrialFibrillationNotification } from "../../../services/notification.service";
 import {
     appendPacketToBleTrackedBatch,
     createBleTrackedBatch,
@@ -547,39 +547,93 @@ export const useBleConnectDevice = (
         }
     };
 
-    const notifyAtrialAlertInBackground = async (thresholdValue: number) => {
-        const appState = AppState.currentState;
-        if (appState === "active") {
-            return;
-        }
+    // const notifyAtrialAlertInBackground = async (thresholdValue: number) => {
+    //     const appState = AppState.currentState;
+    //     if (appState === "active") {
+    //         return;
+    //     }
 
-        const now = Date.now();
-        if (now - lastAtrialNotificationAtRef.current < 30000) {
-            return;
-        }
+    //     const now = Date.now();
+    //     if (now - lastAtrialNotificationAtRef.current < 30000) {
+    //         return;
+    //     }
 
-        try {
-            // eslint-disable-next-line @typescript-eslint/no-var-requires
-            const Notifications = require("expo-notifications");
+    //     try {
+    //         // eslint-disable-next-line @typescript-eslint/no-var-requires
+    //         const Notifications = require("expo-notifications");
 
-            if (!Notifications?.scheduleNotificationAsync) {
-                return;
-            }
+    //         if (!Notifications?.scheduleNotificationAsync) {
+    //             return;
+    //         }
 
-            await Notifications.scheduleNotificationAsync({
-                content: {
-                    title: "Cảnh báo rung nhĩ",
-                    body: `Phát hiện chỉ số bất thường (${thresholdValue.toFixed(4)}). Vui lòng mở ứng dụng để kiểm tra.`,
-                    sound: "default",
-                },
-                trigger: null,
-            });
+    //         await Notifications.scheduleNotificationAsync({
+    //             content: {
+    //                 title: "Cảnh báo rung nhĩ",
+    //                 body: `Phát hiện chỉ số bất thường (${thresholdValue.toFixed(4)}). Vui lòng mở ứng dụng để kiểm tra.`,
+    //                 sound: "default",
+    //             },
+    //             trigger: null,
+    //         });
 
-            lastAtrialNotificationAtRef.current = now;
-        } catch (error) {
-            console.warn("[ATRIAL BACKGROUND NOTIFY FAILED]", error);
-        }
-    };
+    //         lastAtrialNotificationAtRef.current = now;
+    //     } catch (error) {
+    //         console.warn("[ATRIAL BACKGROUND NOTIFY FAILED]", error);
+    //     }
+    // };
+
+    // const submitAtrialAlertIfNeeded = async (modelProbability: number) => {
+    //     const userId = currentUserIdRef.current;
+
+    //     const alertPayload = {
+    //         userId,
+    //         thresholdValue: modelProbability,
+    //         message: `Phát hiện nguy cơ rung nhĩ. Xác suất AI: ${modelProbability}`,
+    //         createdAtClient: new Date().toISOString(),
+    //     };
+
+    //     // console.log("[ATRIAL ALERT CHECK AFTER AI]", alertPayload);
+
+    //     if (!userId) {
+    //         console.log("[ATRIAL ALERT SKIPPED] Missing userId", alertPayload);
+    //         return;
+    //     }
+
+    //     if (!Number.isFinite(modelProbability)) {
+    //         console.log("[ATRIAL ALERT SKIPPED] Invalid modelProbability", alertPayload);
+    //         return;
+    //     }
+
+    //     if (modelProbability > 0.05) {
+    //         console.log("[ATRIAL ALERT SKIPPED] Probability > threshold", {
+    //             ...alertPayload,
+    //             threshold: 0.05,
+    //         });
+    //         return;
+    //     }
+
+    //     try {
+    //         console.log("[ATRIAL ALERT SAVE REQUEST]", alertPayload);
+
+    //         const response = await alertService.saveAtrialAlert(
+    //             userId,
+    //             modelProbability,
+    //             alertPayload.message,
+    //         );
+
+    //         // console.log("[ATRIAL ALERT SAVE RESPONSE]", {
+    //         //     request: alertPayload,
+    //         //     response,
+    //         // });
+
+    //         // await notifyAtrialAlertInBackground(modelProbability);
+    //     } catch (error) {
+    //         console.warn("[ATRIAL ALERT SAVE FAILED]", {
+    //             request: alertPayload,
+    //             error,
+    //             errorMessage: error instanceof Error ? error.message : String(error),
+    //         });
+    //     }
+    // };
 
     const submitAtrialAlertIfNeeded = async (modelProbability: number) => {
         const userId = currentUserIdRef.current;
@@ -591,7 +645,7 @@ export const useBleConnectDevice = (
             createdAtClient: new Date().toISOString(),
         };
 
-        // console.log("[ATRIAL ALERT CHECK AFTER AI]", alertPayload);
+        console.log("[ATRIAL ALERT CHECK AFTER AI]", alertPayload);
 
         if (!userId) {
             console.log("[ATRIAL ALERT SKIPPED] Missing userId", alertPayload);
@@ -611,8 +665,25 @@ export const useBleConnectDevice = (
             return;
         }
 
+        const now = Date.now();
+
+        if (now - lastAtrialNotificationAtRef.current >= 30000) {
+            await showAtrialFibrillationNotification({
+                thresholdValue: Number(modelProbability.toFixed(4)),
+            });
+
+            lastAtrialNotificationAtRef.current = now;
+
+            console.log("[AF NOTIFICATION SHOWN BEFORE API]", alertPayload);
+        } else {
+            console.log("[AF NOTIFICATION SKIPPED] Too frequent", {
+                ...alertPayload,
+                lastNotificationAt: lastAtrialNotificationAtRef.current,
+            });
+        }
+
         try {
-            // console.log("[ATRIAL ALERT SAVE REQUEST]", alertPayload);
+            console.log("[ATRIAL ALERT SAVE REQUEST]", alertPayload);
 
             const response = await alertService.saveAtrialAlert(
                 userId,
@@ -620,12 +691,10 @@ export const useBleConnectDevice = (
                 alertPayload.message,
             );
 
-            // console.log("[ATRIAL ALERT SAVE RESPONSE]", {
-            //     request: alertPayload,
-            //     response,
-            // });
-
-            await notifyAtrialAlertInBackground(modelProbability);
+            console.log("[ATRIAL ALERT SAVE RESPONSE]", {
+                request: alertPayload,
+                response,
+            });
         } catch (error) {
             console.warn("[ATRIAL ALERT SAVE FAILED]", {
                 request: alertPayload,
