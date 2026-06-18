@@ -72,3 +72,32 @@ export const showAtrialFibrillationNotification = async (params?: {
         },
     });
 };
+
+export const showDisconnectNotification = async (params?: {
+    title?: string;
+    body?: string;
+}) => {
+    const channelId = await notifee.createChannel({
+        id: "device_alerts",
+        name: "Cảnh báo thiết bị",
+        importance: AndroidImportance.HIGH,
+    });
+
+    await notifee.displayNotification({
+        title: params?.title || "Mất kết nối",
+        body: params?.body || "Thiết bị vòng tay đã bị mất kết nối.",
+        android: {
+            channelId,
+            pressAction: {
+                id: "default",
+            },
+        },
+        ios: {
+            foregroundPresentationOptions: {
+                alert: true,
+                badge: true,
+                sound: true,
+            },
+        },
+    });
+};

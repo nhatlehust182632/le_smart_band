@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "smart-pen",
-    "slug": "smart-pen",
+    "name": "PulseGo",
+    "slug": "pulsego",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "smartpen",
+    "scheme": "pulsego",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",

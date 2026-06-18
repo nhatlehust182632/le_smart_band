@@ -476,7 +476,7 @@ export default function HeartRateScreen() {
             </View>
           </View>
 
-          <View style={styles.alertCard}>
+          {/* <View style={styles.alertCard}>
             <View style={styles.alertLeft}>
               <Ionicons name="warning" size={24} color="#D32F2F" />
             </View>
@@ -488,7 +488,7 @@ export default function HeartRateScreen() {
                 trong thời gian dài.
               </Text>
             </View>
-          </View>
+          </View> */}
 
           <View style={styles.card}>
             <View style={styles.cardTitleRow}>

@@ -3,6 +3,7 @@ export const ENV = {
   SMART_BAND_API_BASE_URL: "https://api.smartband.com",
   HEALTH_API_BASE_URL: "http://192.168.1.248:3000",
   USER_API_BASE_URL: "http://192.168.1.44:3000",
+  // USER_API_BASE_URL: "http://192.168.2.234:3000",
   DEFAULT_TIMEOUT: 10000,
   APP_ENV,
   USER_ACCESS_TOKEN: "USER_ACCESS_TOKEN",

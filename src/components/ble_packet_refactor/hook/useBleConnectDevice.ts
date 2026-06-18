@@ -58,6 +58,7 @@ import {
     stopDemoBlePacketTimers,
 } from "../demo/runDemoBlePackets";
 
+import { showDisconnectNotification } from "@/services/notification.service";
 import { showAtrialFibrillationNotification } from "../../../services/notification.service";
 import {
     appendPacketToBleTrackedBatch,
@@ -65,7 +66,6 @@ import {
     getBleTrackedBatchCompleteness,
     type BleTrackedBatch,
 } from "../utils/packetBatchTracker";
-
 
 const manualDisconnectBlockedDeviceIds = new Set<string>();
 
@@ -542,10 +542,14 @@ export const useBleConnectDevice = (
                 batteryPercent,
                 latestIsChargingRef.current,
             );
+
+            await showDisconnectNotification();
         } catch (error) {
             console.warn("[BATTERY LOG SAVE FAILED]", error);
         }
     };
+
+
 
     // const notifyAtrialAlertInBackground = async (thresholdValue: number) => {
     //     const appState = AppState.currentState;

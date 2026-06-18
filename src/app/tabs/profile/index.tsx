@@ -149,7 +149,7 @@ export default function ProfileScreen() {
               </Text>
               <Switch value={notifyFamily} onValueChange={setNotifyFamily} />
             </View>
-
+            {/* 
             <View style={styles.switchRow}>
               <Text style={styles.switchLabel}>
                 Cảnh báo nhịp tim bất thường
@@ -160,7 +160,7 @@ export default function ProfileScreen() {
             <View style={styles.switchRow}>
               <Text style={styles.switchLabel}>Theo dõi GPS liên tục</Text>
               <Switch value={gpsTracking} onValueChange={setGpsTracking} />
-            </View>
+            </View> */}
           </View>
 
           <View style={styles.card}>
