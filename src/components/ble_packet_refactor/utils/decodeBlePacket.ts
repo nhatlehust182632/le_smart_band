@@ -119,7 +119,7 @@ export const decodeBlePacket = (value: string): ParsedBlePacket => {
              * 1 = đang sạc
              * 0 = không sạc
              */
-            const chargingValue = payloadDec[0] ?? 0;
+            const chargingValue = payloadBuffer.length >= 1 ? payloadBuffer[0] : 0;
             const isCharging = chargingValue === 1;
 
             parsedPayload = {

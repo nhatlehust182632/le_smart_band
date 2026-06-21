@@ -107,6 +107,36 @@ export const showBatteryStatusNotification = async (params: {
     });
 };
 
+export const showChargingStatusNotification = async (params: {
+    isCharging: boolean;
+}) => {
+    const channelId = await notifee.createChannel({
+        id: "device_alerts",
+        name: "Cảnh báo thiết bị",
+        importance: AndroidImportance.HIGH,
+    });
+
+    await notifee.displayNotification({
+        title: "Thông báo trạng thái sạc",
+        body: params.isCharging
+            ? "Thiết bị đang sạc."
+            : "Thiết bị đã ngắt sạc/không sạc.",
+        android: {
+            channelId,
+            pressAction: {
+                id: "default",
+            },
+        },
+        ios: {
+            foregroundPresentationOptions: {
+                alert: true,
+                badge: true,
+                sound: true,
+            },
+        },
+    });
+};
+
 export const showDisconnectNotification = async (params?: {
     title?: string;
     body?: string;

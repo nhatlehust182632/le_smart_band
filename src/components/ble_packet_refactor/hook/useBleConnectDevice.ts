@@ -60,6 +60,7 @@ import {
 
 import {
     showBatteryStatusNotification,
+    showChargingStatusNotification,
     showDisconnectNotification,
 } from "@/services/notification.service";
 import { showAtrialFibrillationNotification } from "../../../services/notification.service";
@@ -1350,6 +1351,18 @@ export const useBleConnectDevice = (
                 });
             } catch (error) {
                 console.log("[BATTERY STATUS NOTIFICATION ERROR]", error);
+            }
+        }
+
+        if (packetType === 1 && typeof data.payload?.isCharging === "boolean") {
+            latestIsChargingRef.current = data.payload.isCharging ? 1 : 0;
+
+            try {
+                await showChargingStatusNotification({
+                    isCharging: data.payload.isCharging,
+                });
+            } catch (error) {
+                console.log("[CHARGING STATUS NOTIFICATION ERROR]", error);
             }
         }
 
