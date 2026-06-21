@@ -13,6 +13,7 @@ import {
     type BLELogEvent,
     type BLEPacketReceivedEvent,
 } from "../native/bleModule";
+import { showDisconnectNotification } from "../services/notification.service";
 
 export type NativeBleDevice = {
     id: string;
@@ -49,6 +50,9 @@ export function useNativeBleDevice(): UseNativeBleDeviceResult {
     const [logs, setLogs] = useState<BLELogEvent[]>([]);
 
     const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastConnectedDeviceIdRef = useRef<string | null>(null);
+    const manualDisconnectRef = useRef(false);
+    const disconnectNotificationDeviceIdRef = useRef<string | null>(null);
 
     useEffect(() => {
         const loadInitialState = async () => {
@@ -57,6 +61,10 @@ export function useNativeBleDevice(): UseNativeBleDeviceResult {
 
                 if (state?.connectedDeviceId) {
                     setConnectedDeviceId(state.connectedDeviceId);
+                }
+
+                if (state?.connectedDeviceId) {
+                    lastConnectedDeviceIdRef.current = state.connectedDeviceId;
                 }
 
                 console.log("[RN] initial native BLE state =", state);
@@ -102,6 +110,9 @@ export function useNativeBleDevice(): UseNativeBleDeviceResult {
             "BLEDeviceConnected",
             (event: BLEDeviceConnectedEvent) => {
                 console.log("[RN] BLEDeviceConnected =", event);
+                manualDisconnectRef.current = false;
+                lastConnectedDeviceIdRef.current = event.deviceId;
+                disconnectNotificationDeviceIdRef.current = null;
                 setConnectedDeviceId(event.deviceId);
                 setLogs((prev) =>
                     [
@@ -119,9 +130,31 @@ export function useNativeBleDevice(): UseNativeBleDeviceResult {
             "BLEDeviceDisconnected",
             (event: BLEDeviceDisconnectedEvent) => {
                 console.log("[RN] BLEDeviceDisconnected =", event);
+                const disconnectedDeviceId = event.deviceId;
                 setConnectedDeviceId((prev) =>
-                    prev === event.deviceId ? null : prev
+                    prev === disconnectedDeviceId ? null : prev
                 );
+
+                if (!manualDisconnectRef.current && disconnectedDeviceId) {
+                    lastConnectedDeviceIdRef.current = disconnectedDeviceId;
+
+                    if (
+                        disconnectNotificationDeviceIdRef.current !==
+                        disconnectedDeviceId
+                    ) {
+                        disconnectNotificationDeviceIdRef.current =
+                            disconnectedDeviceId;
+                        showDisconnectNotification({
+                            title: "Mất kết nối thiết bị",
+                            body: "Thiết bị đã mất kết nối. Vui lòng kiểm tra nguồn điện hoặc khoảng cách Bluetooth.",
+                        }).catch((error) => {
+                            console.log(
+                                "[RN] showDisconnectNotification error =",
+                                error
+                            );
+                        });
+                    }
+                }
 
                 setLogs((prev) =>
                     [
@@ -226,6 +259,8 @@ export function useNativeBleDevice(): UseNativeBleDeviceResult {
 
     const connectToDevice = async (deviceId: string) => {
         try {
+            manualDisconnectRef.current = false;
+            lastConnectedDeviceIdRef.current = deviceId;
             await stopScan();
             await connectNativeBle(deviceId);
         } catch (error) {
@@ -236,6 +271,9 @@ export function useNativeBleDevice(): UseNativeBleDeviceResult {
 
     const disconnect = async () => {
         try {
+            manualDisconnectRef.current = true;
+            lastConnectedDeviceIdRef.current = null;
+            disconnectNotificationDeviceIdRef.current = null;
             await disconnectNativeBle();
             setConnectedDeviceId(null);
         } catch (error) {

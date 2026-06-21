@@ -61,6 +61,7 @@ import {
 import {
     showBatteryStatusNotification,
     showChargingStatusNotification,
+    showDisconnectNotification,
 } from "@/services/notification.service";
 import { showAtrialFibrillationNotification } from "../../../services/notification.service";
 import {
@@ -118,6 +119,7 @@ export const useBleConnectDevice = (
 
     const deviceRef = useRef<Device | null>(null);
     const notifySubscriptionsRef = useRef<Subscription[]>([]);
+    const deviceDisconnectSubscriptionRef = useRef<Subscription | null>(null);
 
     const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -372,8 +374,17 @@ export const useBleConnectDevice = (
      * - notify subscriptions
      * - poll interval
      */
+    const removeDeviceDisconnectListener = () => {
+        if (deviceDisconnectSubscriptionRef.current) {
+            deviceDisconnectSubscriptionRef.current.remove();
+            deviceDisconnectSubscriptionRef.current = null;
+        }
+    };
+
     const stopAll = () => {
         bleManagerRef.current.stopDeviceScan();
+
+        removeDeviceDisconnectListener();
 
         if (scanTimeoutRef.current) {
             clearTimeout(scanTimeoutRef.current);
@@ -1739,6 +1750,83 @@ export const useBleConnectDevice = (
         // }
     };
 
+    const handleUnexpectedDeviceDisconnected = async (
+        disconnectedDeviceId?: string | null
+    ) => {
+        const deviceId =
+            disconnectedDeviceId ??
+            deviceRef.current?.id ??
+            connectedDevice?.id ??
+            autoConnectDeviceId ??
+            null;
+
+        if (!deviceId || userRequestedDisconnectRef.current) {
+            return;
+        }
+
+        userRequestedDisconnectRef.current = true;
+        connectionActionIdRef.current += 1;
+        blockAutoConnectForDevice(deviceId);
+        removeDeviceDisconnectListener();
+
+        stopAll();
+        stopDemoBlePacketTimers(demoPacketTimersRef.current);
+
+        if (demoNextBatchTimerRef.current) {
+            clearTimeout(demoNextBatchTimerRef.current);
+            demoNextBatchTimerRef.current = null;
+        }
+
+        resetActivePacketBatch();
+        resetProcessingQueues();
+
+        const userId = currentUserIdRef.current ?? autoConnectUserId ?? null;
+
+        deviceRef.current = null;
+        setConnectedDevice(null);
+        setStatus("Mất kết nối");
+
+        try {
+            await showDisconnectNotification({
+                title: "Mất kết nối thiết bị",
+                body: "Thiết bị đã mất kết nối. Vui lòng kiểm tra nguồn điện hoặc khoảng cách Bluetooth.",
+            });
+        } catch (error) {
+            console.warn("[BLE DISCONNECT NOTIFICATION FAILED]", error);
+        }
+
+        if (userId) {
+            try {
+                await devicesSource.disconnectActiveDevice(userId);
+            } catch (error) {
+                console.warn("[BLE DISCONNECT ALERT SAVE FAILED]", error);
+            }
+        }
+    };
+
+    const registerDeviceDisconnectListener = (connected: Device) => {
+        removeDeviceDisconnectListener();
+
+        deviceDisconnectSubscriptionRef.current =
+            bleManagerRef.current.onDeviceDisconnected(
+                connected.id,
+                (error, disconnectedDevice) => {
+                    if (userRequestedDisconnectRef.current) {
+                        return;
+                    }
+
+                    console.warn("[BLE DEVICE DISCONNECTED UNEXPECTEDLY]", {
+                        deviceId: disconnectedDevice?.id ?? connected.id,
+                        error,
+                    });
+
+                    void handleUnexpectedDeviceDisconnected(
+                        disconnectedDevice?.id ?? connected.id
+                    );
+                }
+            );
+    };
+
     /**
      * Connect vào thiết bị người dùng chọn.
      */
@@ -1750,6 +1838,7 @@ export const useBleConnectDevice = (
 
         setConnectedDevice(connected);
         setStatus("Đã kết nối");
+        registerDeviceDisconnectListener(connected);
 
         currentUserIdRef.current = userId ?? null;
         connectedUserDeviceRef.current = null;
