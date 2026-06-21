@@ -61,7 +61,6 @@ import {
 import {
     showBatteryStatusNotification,
     showChargingStatusNotification,
-    showDisconnectNotification,
 } from "@/services/notification.service";
 import { showAtrialFibrillationNotification } from "../../../services/notification.service";
 import {
@@ -547,8 +546,6 @@ export const useBleConnectDevice = (
                 batteryPercent,
                 latestIsChargingRef.current,
             );
-
-            await showDisconnectNotification();
         } catch (error) {
             console.warn("[BATTERY LOG SAVE FAILED]", error);
         }
