@@ -80,21 +80,31 @@ export const decodeBlePacket = (value: string): ParsedBlePacket => {
         case 0: {
             /**
              * TYPE 0:
-             * Payload byte đầu tiên = % pin.
-             * Ví dụ: 85 => 85%
+             * - 2 byte đầu payload = % pin, đọc UInt16BE.
+             *   Ví dụ: 00 55 => 85%
+             * - 2 byte tiếp theo payload = nhiệt độ pin (độ C), đọc Int16BE.
+             *   Ví dụ: 00 1E => 30°C
              */
-            const rawBatteryPercent = payloadDec[1] ?? 0;
+            const rawBatteryPercent = payloadBuffer.length >= 2 ? ((payloadBuffer[0] << 8) | payloadBuffer[1]) : 0;
+
+            const batteryTemperatureRawValue =
+                payloadBuffer.length >= 4 ? ((payloadBuffer[2] << 8) | payloadBuffer[3]) : null;
 
             const batteryPercent = Math.max(
                 0,
                 Math.min(100, rawBatteryPercent)
             );
+
             parsedPayload = {
                 packetName: "TYPE_0",
                 status: "BATTERY_LEVEL",
 
                 payloadByteLength: payloadBuffer.length,
                 batteryPercent,
+                batteryTemperatureRawValue:
+                    batteryTemperatureRawValue ?? undefined,
+                batteryTemperatureC:
+                    batteryTemperatureRawValue ?? undefined,
 
                 rawBytes: payloadDec,
             };

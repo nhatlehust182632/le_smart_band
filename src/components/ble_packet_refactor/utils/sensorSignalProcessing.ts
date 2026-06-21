@@ -7,7 +7,9 @@
 const SAMPLE_RATE_HZ = 50;
 const EXPECTED_SIGNAL_LENGTH = 1500;
 const EPSILON = 1e-6;
-const ACC_SCALE_FACTOR = 0.0047856;
+// const ACC_SCALE_FACTOR = 0.0047856;
+const ACC_LSB_PER_G = 4096;
+const GRAVITY_M_S2 = 9.8;
 
 const HEART_RATE_MIN_HZ = 0.67;
 const HEART_RATE_MAX_HZ = 3.5;
@@ -39,6 +41,32 @@ export type ProcessedSensorFusionSignals = {
  * - ppgProcessed: PPG đã lọc + Z-score
  * - accProcessed: ACC magnitude + Z-score
  */
+// export function preprocessSensorFusionSignals(
+//   type6: number[],
+//   type5x: number[],
+//   type5y: number[],
+//   type5z: number[],
+// ): ProcessedSensorFusionSignals {
+//   validateFourSignalArrays(type6, type5x, type5y, type5z);
+
+//   const ppgFiltered = filterPpgZeroPhase(type6);
+//   const ppgProcessed = zScoreNormalize(ppgFiltered);
+
+//   const accMagnitude = type5x.map((x, index) => {
+//     const y = type5y[index];
+//     const z = type5z[index];
+
+//     return Math.sqrt(x * x + y * y + z * z) * ACC_SCALE_FACTOR;
+//   });
+
+//   const accProcessed = zScoreNormalize(accMagnitude);
+
+//   return {
+//     ppgProcessed,
+//     accProcessed,
+//   };
+// }
+
 export function preprocessSensorFusionSignals(
   type6: number[],
   type5x: number[],
@@ -47,14 +75,29 @@ export function preprocessSensorFusionSignals(
 ): ProcessedSensorFusionSignals {
   validateFourSignalArrays(type6, type5x, type5y, type5z);
 
+  // Type 6: lọc tín hiệu PPG và chuẩn hóa Z-score
   const ppgFiltered = filterPpgZeroPhase(type6);
   const ppgProcessed = zScoreNormalize(ppgFiltered);
 
+  // Type 5: tính độ lớn tổng hợp của gia tốc từ ba trục X, Y, Z
   const accMagnitude = type5x.map((x, index) => {
     const y = type5y[index];
     const z = type5z[index];
 
-    return Math.sqrt(x * x + y * y + z * z) * ACC_SCALE_FACTOR;
+    // Độ lớn tổng hợp theo đơn vị LSB
+    const rawTotal = Math.sqrt(
+      x * x +
+      y * y +
+      z * z
+    );
+
+    // Chuyển từ LSB sang g
+    const accelerationG = rawTotal / ACC_LSB_PER_G;
+
+    // Chuyển từ g sang m/s²
+    const accelerationMs2 = accelerationG * GRAVITY_M_S2;
+
+    return accelerationMs2;
   });
 
   const accProcessed = zScoreNormalize(accMagnitude);
@@ -64,6 +107,7 @@ export function preprocessSensorFusionSignals(
     accProcessed,
   };
 }
+
 
 /**
  * Hàm tính nhịp tim từ type6.

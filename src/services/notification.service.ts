@@ -73,6 +73,40 @@ export const showAtrialFibrillationNotification = async (params?: {
     });
 };
 
+export const showBatteryStatusNotification = async (params: {
+    batteryPercent: number;
+    batteryTemperatureC?: number | null;
+}) => {
+    const channelId = await notifee.createChannel({
+        id: "device_alerts",
+        name: "Cảnh báo thiết bị",
+        importance: AndroidImportance.HIGH,
+    });
+
+    const temperatureText =
+        typeof params.batteryTemperatureC === "number"
+            ? `${params.batteryTemperatureC}°F (${params.batteryTemperatureC - 273}°C)`
+            : "Không có dữ liệu";
+
+    await notifee.displayNotification({
+        title: "Thông báo pin",
+        body: `Pin: ${params.batteryPercent}% - Nhiệt độ pin: ${temperatureText}`,
+        android: {
+            channelId,
+            pressAction: {
+                id: "default",
+            },
+        },
+        ios: {
+            foregroundPresentationOptions: {
+                alert: true,
+                badge: true,
+                sound: true,
+            },
+        },
+    });
+};
+
 export const showDisconnectNotification = async (params?: {
     title?: string;
     body?: string;

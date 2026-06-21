@@ -16,8 +16,10 @@ export type ParsedBlePayload = {
     bytesPerValue?: number;
     valueCount?: number;
 
-    // TYPE 0 - pin
+    // TYPE 0 - pin + nhiệt độ pin
     batteryPercent?: number;
+    batteryTemperatureRawValue?: number;
+    batteryTemperatureC?: number;
 
     // TYPE 1 - trạng thái sạc
     chargingRawValue?: number;
@@ -103,6 +105,8 @@ export type BleSystemPacketDetail = {
     rawBytes: number[];
 
     batteryPercent?: number;
+    batteryTemperatureRawValue?: number;
+    batteryTemperatureC?: number;
     chargingRawValue?: number;
     isCharging?: boolean;
     statusCode?: number;
@@ -130,6 +134,7 @@ export type GroupedPacketSummary = {
     systemPacketDetails?: BleSystemPacketDetail[];
 
     latestBatteryPercent?: number | null;
+    latestBatteryTemperatureC?: number | null;
     latestIsCharging?: boolean | null;
     latestStatusCode?: number | null;
     latestStatusName?: string | null;

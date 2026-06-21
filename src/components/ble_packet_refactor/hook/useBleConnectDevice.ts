@@ -58,7 +58,10 @@ import {
     stopDemoBlePacketTimers,
 } from "../demo/runDemoBlePackets";
 
-import { showDisconnectNotification } from "@/services/notification.service";
+import {
+    showBatteryStatusNotification,
+    showDisconnectNotification,
+} from "@/services/notification.service";
 import { showAtrialFibrillationNotification } from "../../../services/notification.service";
 import {
     appendPacketToBleTrackedBatch,
@@ -202,6 +205,7 @@ export const useBleConnectDevice = (
     } | null>(null);
     const type6MacAddressRef = useRef<string | null>(null);
     const latestBatteryPercentRef = useRef<number | null>(null);
+    const latestBatteryTemperatureCRef = useRef<number | null>(null);
     const latestIsChargingRef = useRef<number>(0);
     const lastSubmittedHeartRateWindowKeyRef = useRef<string | null>(null);
 
@@ -1330,8 +1334,26 @@ export const useBleConnectDevice = (
         //     // decoded: data,
         // });
         const packetId = data.header?.packetId.dec;
+        const packetType = data.header?.packetType.dec;
 
-        if (data.header?.packetType.dec === 6 && data.mac?.address) {
+        if (packetType === 0 && typeof data.payload?.batteryPercent === "number") {
+            latestBatteryPercentRef.current = data.payload.batteryPercent;
+            latestBatteryTemperatureCRef.current =
+                typeof data.payload.batteryTemperatureC === "number"
+                    ? data.payload.batteryTemperatureC
+                    : null;
+
+            try {
+                await showBatteryStatusNotification({
+                    batteryPercent: data.payload.batteryPercent,
+                    batteryTemperatureC: data.payload.batteryTemperatureC,
+                });
+            } catch (error) {
+                console.log("[BATTERY STATUS NOTIFICATION ERROR]", error);
+            }
+        }
+
+        if (packetType === 6 && data.mac?.address) {
             type6MacAddressRef.current = data.mac.address;
         }
 

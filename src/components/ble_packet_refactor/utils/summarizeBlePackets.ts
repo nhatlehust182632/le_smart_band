@@ -111,6 +111,8 @@ export const buildGroupedPacketSummary = (
                 rawBytes: payload?.rawBytes ?? [],
 
                 batteryPercent: payload?.batteryPercent,
+                batteryTemperatureRawValue: payload?.batteryTemperatureRawValue,
+                batteryTemperatureC: payload?.batteryTemperatureC,
                 chargingRawValue: payload?.chargingRawValue,
                 isCharging: payload?.isCharging,
                 statusCode: payload?.statusCode,
@@ -145,6 +147,11 @@ export const buildGroupedPacketSummary = (
             latestBatteryPercent:
                 packetType === 0
                     ? latestSystemPacket?.batteryPercent ?? null
+                    : null,
+
+            latestBatteryTemperatureC:
+                packetType === 0
+                    ? latestSystemPacket?.batteryTemperatureC ?? null
                     : null,
 
             latestIsCharging:
