@@ -139,6 +139,8 @@ export const useBleConnectDevice = (
     const userRequestedDisconnectRef = useRef(false);
     const lastAutoConnectDeviceIdRef = useRef<string | undefined>(undefined);
     const connectionActionIdRef = useRef(0);
+    const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const abnormalReconnectDeviceIdRef = useRef<string | null>(null);
 
     /**
      * Batch đang được thu theo packetId.
@@ -381,6 +383,44 @@ export const useBleConnectDevice = (
         }
     };
 
+    const clearReconnectTimer = () => {
+        if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+        }
+    };
+
+    const scheduleReconnectAfterUnexpectedDisconnect = (
+        deviceId: string,
+        userId?: string | null
+    ) => {
+        clearReconnectTimer();
+
+        abnormalReconnectDeviceIdRef.current = deviceId;
+
+        reconnectTimeoutRef.current = setTimeout(async () => {
+            reconnectTimeoutRef.current = null;
+
+            if (
+                userRequestedDisconnectRef.current ||
+                deviceRef.current ||
+                abnormalReconnectDeviceIdRef.current !== deviceId
+            ) {
+                return;
+            }
+
+            await connectDeviceById(deviceId, userId ?? undefined);
+
+            if (
+                !deviceRef.current &&
+                !userRequestedDisconnectRef.current &&
+                abnormalReconnectDeviceIdRef.current === deviceId
+            ) {
+                scheduleReconnectAfterUnexpectedDisconnect(deviceId, userId);
+            }
+        }, 5000);
+    };
+
     const stopAll = () => {
         bleManagerRef.current.stopDeviceScan();
 
@@ -415,6 +455,7 @@ export const useBleConnectDevice = (
         const disconnectedDeviceId =
             deviceRef.current?.id ?? connectedDevice?.id ?? autoConnectDeviceId ?? null;
 
+        clearReconnectTimer();
         blockAutoConnectForDevice(disconnectedDeviceId);
 
         try {
@@ -1764,9 +1805,9 @@ export const useBleConnectDevice = (
             return;
         }
 
-        userRequestedDisconnectRef.current = true;
+        userRequestedDisconnectRef.current = false;
         connectionActionIdRef.current += 1;
-        blockAutoConnectForDevice(deviceId);
+        allowAutoConnectForDevice(deviceId);
         removeDeviceDisconnectListener();
 
         stopAll();
@@ -1802,6 +1843,8 @@ export const useBleConnectDevice = (
                 console.warn("[BLE DISCONNECT ALERT SAVE FAILED]", error);
             }
         }
+
+        scheduleReconnectAfterUnexpectedDisconnect(deviceId, userId);
     };
 
     const registerDeviceDisconnectListener = (connected: Device) => {
@@ -1836,6 +1879,8 @@ export const useBleConnectDevice = (
     ) => {
         await connected.discoverAllServicesAndCharacteristics();
 
+        clearReconnectTimer();
+        abnormalReconnectDeviceIdRef.current = null;
         setConnectedDevice(connected);
         setStatus("Đã kết nối");
         registerDeviceDisconnectListener(connected);
@@ -2059,6 +2104,7 @@ export const useBleConnectDevice = (
      */
     useEffect(() => {
         return () => {
+            clearReconnectTimer();
             stopAll();
             stopDemoBlePacketTimers(demoPacketTimersRef.current);
             resetActivePacketBatch();
