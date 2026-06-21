@@ -82,7 +82,17 @@ export const buildGroupedPacketSummary = (
     const totalPayloadByteLength = filteredPackets.reduce((sum, packet) => {
         return sum + (packet.data.payload?.actualPayloadByteLength ?? 0);
     }, 0);
-
+    console.log(`Summary for packet type ${packetType}:`, {
+        expectedPacketCount,
+        actualPacketCount: filteredPackets.length,
+        isEnoughPackets: filteredPackets.length === expectedPacketCount,
+        macList,
+        macCount: macList.length,
+        packetIdList,
+        packetIndexList,
+        totalDataCount: filteredPackets.length,
+        totalPayloadByteLength,
+    });
     if (packetType === 0 || packetType === 1 || packetType === 2) {
         const systemPacketDetails = filteredPackets.map((packet) => {
             const payload = packet.data.payload;
@@ -113,7 +123,7 @@ export const buildGroupedPacketSummary = (
             systemPacketDetails.length > 0
                 ? systemPacketDetails[systemPacketDetails.length - 1]
                 : null;
-
+        console.log("Latest system packet detail:", latestSystemPacket);
         return {
             packetType,
 

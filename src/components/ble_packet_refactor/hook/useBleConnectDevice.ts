@@ -661,10 +661,10 @@ export const useBleConnectDevice = (
             return;
         }
 
-        if (modelProbability <= 0.05) {
+        if (modelProbability <= 0.6) {
             console.log("[ATRIAL ALERT SKIPPED] Probability <= threshold", {
                 ...alertPayload,
-                threshold: 0.05,
+                threshold: 0.6,
             });
             return;
         }
