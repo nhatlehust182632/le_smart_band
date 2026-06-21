@@ -133,6 +133,7 @@ export const useBleConnectDevice = (
 
     const demoSessionIndexRef = useRef(0);
     const isAutoConnectingRef = useRef(false);
+    const isManualConnectingRef = useRef(false);
     const userRequestedDisconnectRef = useRef(false);
     const lastAutoConnectDeviceIdRef = useRef<string | undefined>(undefined);
     const connectionActionIdRef = useRef(0);
@@ -1789,6 +1790,7 @@ export const useBleConnectDevice = (
     };
 
     const connectDevice = async (device: Device, userId?: string) => {
+        isManualConnectingRef.current = true;
         allowAutoConnectForDevice(device.id);
         userRequestedDisconnectRef.current = false;
         const actionId = ++connectionActionIdRef.current;
@@ -1819,8 +1821,11 @@ export const useBleConnectDevice = (
             deviceRef.current = connected;
 
             await finalizeConnectedDevice(connected, userId);
-        } catch {
+        } catch (error) {
+            console.warn("[BLE MANUAL CONNECT FAILED]", error);
             setStatus("Kết nối thất bại");
+        } finally {
+            isManualConnectingRef.current = false;
         }
     };
 
@@ -1832,7 +1837,7 @@ export const useBleConnectDevice = (
         isAutoConnectingRef.current = true;
         const actionId = ++connectionActionIdRef.current;
 
-        try {
+        const prepareConnection = () => {
             stopAll();
             stopDemoBlePacketTimers(demoPacketTimersRef.current);
 
@@ -1847,8 +1852,10 @@ export const useBleConnectDevice = (
             setScanModalVisible(false);
             setScanning(false);
             setStatus("Đang kết nối...");
+        };
 
-            const connected = await bleManagerRef.current.connectToDevice(deviceId);
+        const connectDiscoveredDevice = async (device: Device) => {
+            const connected = await device.connect();
 
             if (userRequestedDisconnectRef.current || actionId !== connectionActionIdRef.current) {
                 await connected.cancelConnection();
@@ -1858,7 +1865,100 @@ export const useBleConnectDevice = (
             deviceRef.current = connected;
 
             await finalizeConnectedDevice(connected, userId);
-        } catch {
+        };
+
+        const scanAndConnectDeviceById = async () => {
+            setStatus("Đang tìm thiết bị đã lưu...");
+            setScanning(true);
+
+            return new Promise<void>((resolve, reject) => {
+                let completed = false;
+
+                const complete = (callback: () => void) => {
+                    if (completed) {
+                        return;
+                    }
+
+                    completed = true;
+
+                    if (scanTimeoutRef.current) {
+                        clearTimeout(scanTimeoutRef.current);
+                        scanTimeoutRef.current = null;
+                    }
+
+                    bleManagerRef.current.stopDeviceScan();
+                    setScanning(false);
+                    callback();
+                };
+
+                scanTimeoutRef.current = setTimeout(() => {
+                    complete(() => reject(new Error("Không tìm thấy thiết bị đã lưu")));
+                }, BLE_SCAN_DURATION_MS);
+
+                bleManagerRef.current.startDeviceScan(
+                    null,
+                    null,
+                    (error, device) => {
+                        if (completed) {
+                            return;
+                        }
+
+                        if (error) {
+                            complete(() => reject(error));
+                            return;
+                        }
+
+                        if (!device || device.id !== deviceId) {
+                            return;
+                        }
+
+                        complete(() => {
+                            void connectDiscoveredDevice(device)
+                                .then(resolve)
+                                .catch(reject);
+                        });
+                    }
+                );
+            });
+        };
+
+        try {
+            const granted = await requestPermissions();
+
+            if (!granted) {
+                setStatus("Chưa được cấp quyền BLE");
+                return;
+            }
+
+            const managerState = await bleManagerRef.current.state();
+
+            if (managerState !== State.PoweredOn) {
+                setStatus("Bluetooth chưa bật");
+                return;
+            }
+
+            prepareConnection();
+
+            try {
+                const connected = await bleManagerRef.current.connectToDevice(deviceId);
+
+                if (userRequestedDisconnectRef.current || actionId !== connectionActionIdRef.current) {
+                    await connected.cancelConnection();
+                    return;
+                }
+
+                deviceRef.current = connected;
+
+                await finalizeConnectedDevice(connected, userId);
+            } catch {
+                if (userRequestedDisconnectRef.current || actionId !== connectionActionIdRef.current) {
+                    return;
+                }
+
+                await scanAndConnectDeviceById();
+            }
+        } catch (error) {
+            console.warn("[BLE AUTO CONNECT FAILED]", error);
             setStatus("Kết nối thất bại");
         } finally {
             isAutoConnectingRef.current = false;
@@ -1899,6 +1999,7 @@ export const useBleConnectDevice = (
             !scanning &&
             !scanModalVisible &&
             !isAutoConnectingRef.current &&
+            !isManualConnectingRef.current &&
             !userRequestedDisconnectRef.current &&
             !isAutoConnectBlocked(autoConnectDeviceId)
         ) {
