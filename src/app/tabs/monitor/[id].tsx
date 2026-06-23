@@ -110,7 +110,7 @@ export default function MonitorDetailScreen() {
   // }
 
   return (
-    <SafeAreaView style={localStyles.safeOrange}>
+    <SafeAreaView edges={["top"]} style={localStyles.safeOrange}>
       <StatusBar barStyle="light-content" />
       <View style={styles.container}>
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -253,7 +253,7 @@ export default function MonitorDetailScreen() {
             <Text style={localStyles.cancelMonitorButtonText}>Hủy giám sát</Text>
           </TouchableOpacity>
 
-          <View style={{ height: 24 }} />
+          <View style={{ height: 0 }} />
         </ScrollView>
       </View>
     </SafeAreaView>

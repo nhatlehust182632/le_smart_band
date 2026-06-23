@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { requestConnectedDeviceStatusCheck } from "../../../components/ble_packet_refactor/hook/useBleConnectDevice";
 import { useAuth } from "../../../context/AuthContext";
 import { useProfileContext } from "../../../hooks/profile-context";
 import { styles } from "../../../styles/appStyles";
@@ -23,6 +24,7 @@ export default function ProfileScreen() {
   const [notifyFamily, setNotifyFamily] = useState(true);
   const [heartAlert, setHeartAlert] = useState(true);
   const [gpsTracking, setGpsTracking] = useState(true);
+  const [checkingDeviceStatus, setCheckingDeviceStatus] = useState(false);
   const { logout, user } = useAuth();
   const { profile, refreshProfileData } = useProfileContext();
 
@@ -48,8 +50,29 @@ export default function ProfileScreen() {
     }
   }, [user?.id]);
 
+  const handleCheckDeviceStatus = async () => {
+    if (checkingDeviceStatus) return;
+
+    try {
+      setCheckingDeviceStatus(true);
+      await requestConnectedDeviceStatusCheck();
+
+      Alert.alert(
+        "Đã gửi yêu cầu",
+        "App đã gửi yêu cầu kiểm tra trạng thái xuống thiết bị."
+      );
+    } catch (error: any) {
+      Alert.alert(
+        "Không gửi được yêu cầu",
+        error?.message || "Thiết bị chưa kết nối hoặc chưa hỗ trợ ghi dữ liệu."
+      );
+    } finally {
+      setCheckingDeviceStatus(false);
+    }
+  };
+
   return (
-    <SafeAreaView style={localStyles.safePurple}>
+    <SafeAreaView edges={["top"]} style={localStyles.safePurple}>
       <StatusBar barStyle="light-content" />
       <View style={styles.container}>
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -135,6 +158,22 @@ export default function ProfileScreen() {
               <Text style={styles.infoLabel}>Thiết bị đang dùng</Text>
               <Text style={styles.infoValue}>{data?.model_name ?? ""}</Text>
             </View>
+
+            <TouchableOpacity
+              style={[
+                localStyles.deviceStatusButton,
+                checkingDeviceStatus && localStyles.deviceStatusButtonDisabled,
+              ]}
+              onPress={handleCheckDeviceStatus}
+              disabled={checkingDeviceStatus}
+            >
+              <Ionicons name="pulse-outline" size={18} color="#fff" />
+              <Text style={localStyles.deviceStatusButtonText}>
+                {checkingDeviceStatus
+                  ? "Đang gửi yêu cầu..."
+                  : "Kiểm tra trạng thái thiết bị"}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.card}>
@@ -208,7 +247,7 @@ export default function ProfileScreen() {
             </Text>
           </TouchableOpacity>
 
-          <View style={{ height: 24 }} />
+          <View style={{ height: 0 }} />
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -218,7 +257,7 @@ export default function ProfileScreen() {
 const localStyles = StyleSheet.create({
   safePurple: {
     flex: 1,
-    backgroundColor: "#4A148C",
+    backgroundColor: "#F4FAFF",
   },
   editButton: {
     marginTop: 16,
@@ -232,6 +271,25 @@ const localStyles = StyleSheet.create({
     gap: 8,
   },
   editButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  deviceStatusButton: {
+    marginTop: 16,
+    backgroundColor: "#4A148C",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    gap: 8,
+  },
+  deviceStatusButtonDisabled: {
+    opacity: 0.65,
+  },
+  deviceStatusButtonText: {
     color: "#fff",
     fontWeight: "700",
     fontSize: 15,

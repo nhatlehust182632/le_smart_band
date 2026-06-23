@@ -79,7 +79,7 @@ export default function MonitorListScreen() {
   );
 
   return (
-    <SafeAreaView style={localStyles.safeOrange}>
+    <SafeAreaView edges={["top"]} style={localStyles.safeOrange}>
       <StatusBar barStyle="light-content" />
       <View style={styles.container}>
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -114,7 +114,7 @@ export default function MonitorListScreen() {
             </View>
           ) : null}
 
-          <View style={{ height: 24 }} />
+          <View style={{ height: 0 }} />
         </ScrollView>
       </View>
     </SafeAreaView>

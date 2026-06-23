@@ -1,3 +1,4 @@
+import { Buffer } from "buffer";
 import { useEffect, useRef, useState } from "react";
 import {
     PermissionsAndroid,
@@ -45,6 +46,7 @@ import {
 } from "../utils/type6SlidingWindows";
 
 import { alertService } from "@/api/services/alert.service";
+import { deviceStatusSource } from "@/data-sources/deviceStatusSource";
 import { heartRateSource } from "@/data-sources/heartRateSource";
 import { calculateHeartRateFromType6 } from "../utils/sensorSignalProcessing";
 
@@ -70,6 +72,18 @@ import {
     getBleTrackedBatchCompleteness,
     type BleTrackedBatch,
 } from "../utils/packetBatchTracker";
+
+const DEVICE_STATUS_CHECK_REQUEST_BYTE = 0x02;
+
+let activeDeviceStatusCheckWriter: (() => Promise<void>) | null = null;
+
+export const requestConnectedDeviceStatusCheck = async () => {
+    if (!activeDeviceStatusCheckWriter) {
+        throw new Error("Thiết bị chưa kết nối hoặc chưa tìm thấy characteristic ghi dữ liệu");
+    }
+
+    await activeDeviceStatusCheckWriter();
+};
 
 const manualDisconnectBlockedDeviceIds = new Set<string>();
 
@@ -120,6 +134,11 @@ export const useBleConnectDevice = (
     const deviceRef = useRef<Device | null>(null);
     const notifySubscriptionsRef = useRef<Subscription[]>([]);
     const deviceDisconnectSubscriptionRef = useRef<Subscription | null>(null);
+    const writableTargetRef = useRef<{
+        serviceUUID: string;
+        charUUID: string;
+        withResponse: boolean;
+    } | null>(null);
 
     const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -213,6 +232,7 @@ export const useBleConnectDevice = (
     const latestBatteryTemperatureCRef = useRef<number | null>(null);
     const latestIsChargingRef = useRef<number>(0);
     const lastSubmittedHeartRateWindowKeyRef = useRef<string | null>(null);
+    const lastSubmittedDeviceStatusPacketHexRef = useRef<string | null>(null);
 
     /**
      * Reset batch packet đang active.
@@ -435,6 +455,8 @@ export const useBleConnectDevice = (
             subscription.remove();
         });
         notifySubscriptionsRef.current = [];
+        writableTargetRef.current = null;
+        activeDeviceStatusCheckWriter = null;
 
         if (pollTimerRef.current) {
             clearInterval(pollTimerRef.current);
@@ -581,6 +603,39 @@ export const useBleConnectDevice = (
                 error,
             });
         }
+    };
+
+    const sendDeviceStatusCheckRequest = async () => {
+        const connected = deviceRef.current;
+        const writableTarget = writableTargetRef.current;
+
+        if (!connected || !writableTarget) {
+            throw new Error("Thiết bị chưa kết nối hoặc chưa tìm thấy characteristic ghi dữ liệu");
+        }
+
+        const requestBase64 = Buffer.from([DEVICE_STATUS_CHECK_REQUEST_BYTE]).toString("base64");
+
+        if (writableTarget.withResponse) {
+            await connected.writeCharacteristicWithResponseForService(
+                writableTarget.serviceUUID,
+                writableTarget.charUUID,
+                requestBase64,
+            );
+        } else {
+            await connected.writeCharacteristicWithoutResponseForService(
+                writableTarget.serviceUUID,
+                writableTarget.charUUID,
+                requestBase64,
+            );
+        }
+
+        console.log("[BLE DEVICE STATUS CHECK REQUEST SENT]", {
+            serviceUUID: writableTarget.serviceUUID,
+            charUUID: writableTarget.charUUID,
+            byte: DEVICE_STATUS_CHECK_REQUEST_BYTE,
+            base64: requestBase64,
+            withResponse: writableTarget.withResponse,
+        });
     };
 
     const submitBatteryLogIfNeeded = async () => {
@@ -1416,6 +1471,38 @@ export const useBleConnectDevice = (
             }
         }
 
+        if (packetType === 2) {
+            const packetHex = data.hex;
+
+            if (
+                typeof packetHex === "string" &&
+                packetHex.length >= 22 &&
+                lastSubmittedDeviceStatusPacketHexRef.current !== packetHex
+            ) {
+                lastSubmittedDeviceStatusPacketHexRef.current = packetHex;
+
+                try {
+                    console.log("[BLE TYPE2 DEVICE STATUS RECEIVED]", {
+                        source,
+                        serviceUUID,
+                        charUUID,
+                        packetHex,
+                        byteCount: data.bufferLength,
+                        macAddress: data.mac?.address,
+                    });
+
+                    await deviceStatusSource.sendType2DeviceStatusPacket(packetHex);
+
+                    console.log("[BLE TYPE2 DEVICE STATUS SENT TO BE]", {
+                        packetHex,
+                    });
+                } catch (error) {
+                    console.log("[BLE TYPE2 DEVICE STATUS SEND ERROR]", error);
+                    lastSubmittedDeviceStatusPacketHexRef.current = null;
+                }
+            }
+        }
+
         if (packetType === 6 && data.mac?.address) {
             type6MacAddressRef.current = data.mac.address;
         }
@@ -1615,6 +1702,29 @@ export const useBleConnectDevice = (
             //     })),
             // });
             for (const characteristic of characteristics) {
+                if (
+                    !writableTargetRef.current &&
+                    (
+                        characteristic.isWritableWithResponse ||
+                        characteristic.isWritableWithoutResponse
+                    )
+                ) {
+                    writableTargetRef.current = {
+                        serviceUUID: service.uuid,
+                        charUUID: characteristic.uuid,
+                        withResponse: characteristic.isWritableWithResponse,
+                    };
+
+                    activeDeviceStatusCheckWriter = sendDeviceStatusCheckRequest;
+
+                    console.log("[BLE WRITABLE CHARACTERISTIC SELECTED]", {
+                        serviceUUID: service.uuid,
+                        charUUID: characteristic.uuid,
+                        isWritableWithResponse: characteristic.isWritableWithResponse,
+                        isWritableWithoutResponse: characteristic.isWritableWithoutResponse,
+                    });
+                }
+
                 //LeNTN12
                 // if (
                 //     characteristic.isNotifiable ||
@@ -2100,7 +2210,12 @@ export const useBleConnectDevice = (
     };
 
     /**
-     * Cleanup khi màn hình unmount.
+     * Cleanup khi màn hình unmount/logout.
+     *
+     * Lưu ý: react-native-ble-plx có thể reject promise cancelConnection()
+     * khi thiết bị vừa ngắt, adapter đang đổi state, hoặc native connection
+     * đã được giải phóng. Nếu không catch, RN sẽ báo:
+     * "Uncaught (in promise) BleError: Unknown error occurred".
      */
     useEffect(() => {
         return () => {
@@ -2110,11 +2225,23 @@ export const useBleConnectDevice = (
             resetActivePacketBatch();
             resetProcessingQueues();
 
-            if (deviceRef.current) {
-                void deviceRef.current.cancelConnection();
+            const connectedDeviceToCancel = deviceRef.current;
+            deviceRef.current = null;
+            activeDeviceStatusCheckWriter = null;
+            writableTargetRef.current = null;
+
+            if (connectedDeviceToCancel) {
+                void connectedDeviceToCancel.cancelConnection().catch(() => {
+                    // Bỏ qua lỗi cleanup khi logout/unmount.
+                    // react-native-ble-plx có thể reject nếu connection đã bị native giải phóng.
+                });
             }
 
-            bleManagerRef.current.destroy();
+            try {
+                bleManagerRef.current.destroy();
+            } catch {
+                // Bỏ qua lỗi destroy khi logout/unmount.
+            }
         };
     }, []);
 

@@ -358,7 +358,7 @@ export default function LocationScreen() {
   }, [user?.id, historyDays]);
 
   return (
-    <SafeAreaView style={localStyles.safeGreen}>
+    <SafeAreaView edges={["top"]} style={localStyles.safeGreen}>
       <StatusBar barStyle="light-content" />
       <View style={styles.container}>
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -584,7 +584,7 @@ export default function LocationScreen() {
             )}
           </View>
 
-          <View style={{ height: 24 }} />
+          <View style={{ height: 0 }} />
         </ScrollView>
       </View>
     </SafeAreaView>

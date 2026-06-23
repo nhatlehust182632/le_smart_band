@@ -18,8 +18,8 @@ import { useAuth } from "../../context/AuthContext";
 export default function LoginScreen() {
   const { login } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [phone, setPhone] = useState("378147307");
-  const [password, setPassword] = useState("123456");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
 
   const handleLogin = async () => {
     if (loading) return; //  🔥 CHẶN SPAM TẠI ĐÂY

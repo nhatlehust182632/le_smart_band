@@ -33,7 +33,7 @@ export default function TestConnectDeviceScreen() {
     } = useBleConnectDevice(user?.device_id, user?.id);
 
     return (
-        <SafeAreaView style={localStyles.safeBlue}>
+        <SafeAreaView edges={["top"]} style={localStyles.safeBlue}>
             <StatusBar barStyle="light-content" />
 
             <View style={styles.container}>

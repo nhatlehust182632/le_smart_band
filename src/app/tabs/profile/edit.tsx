@@ -170,7 +170,7 @@ export default function EditProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={localStyles.safePurple}>
+    <SafeAreaView edges={["top"]} style={localStyles.safePurple}>
       <StatusBar barStyle="light-content" />
       <View style={styles.container}>
         <LinearGradient colors={["#4A148C", "#6A1B9A"]} style={styles.header}>
@@ -291,7 +291,7 @@ export default function EditProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          <View style={{ height: 24 }} />
+          <View style={{ height: 0 }} />
         </ScrollView>
       </View>
 

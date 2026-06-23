@@ -267,7 +267,7 @@ export default function HeartRateScreen() {
   };
   const visibleIndexes = getVisibleIndexes(validHeartRateChartData.length, 6);
   return (
-    <SafeAreaView style={localStyles.safeRed}>
+    <SafeAreaView edges={["top"]} style={localStyles.safeRed}>
       <StatusBar barStyle="light-content" />
       <View style={styles.container}>
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -545,7 +545,7 @@ export default function HeartRateScreen() {
             )}
           </View>
 
-          <View style={{ height: 24 }} />
+          <View style={{ height: 0 }} />
         </ScrollView>
       </View>
     </SafeAreaView>

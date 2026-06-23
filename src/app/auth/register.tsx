@@ -17,9 +17,9 @@ import { useAuth } from "../../context/AuthContext";
 export default function RegisterScreen() {
   const { register } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [name, setName] = useState("hungtp");
-  const [phone, setPhone] = useState("0378147307");
-  const [password, setPassword] = useState("123456");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
 
   const handleRegister = async () => {
     if (loading) return;

@@ -38,7 +38,7 @@ export default function HomeScreen() {
   }, []);
 
   return (
-    <SafeAreaView style={localStyles.safeBlue}>
+    <SafeAreaView edges={["top"]} style={localStyles.safeBlue}>
       <StatusBar barStyle="light-content" />
       <View style={styles.container}>
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -72,7 +72,7 @@ export default function HomeScreen() {
             calories={summary.calories}
           /> */}
 
-          <View style={{ height: 24 }} />
+          <View style={{ height: 0 }} />
         </ScrollView>
       </View>
     </SafeAreaView>

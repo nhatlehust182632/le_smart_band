@@ -78,7 +78,7 @@ export function CurrentHeartRateSection({
 
     const timer = setInterval(() => {
       handleGetHeartRate();
-    }, 30000);
+    }, 5000);
 
     return () => {
       clearInterval(timer);
